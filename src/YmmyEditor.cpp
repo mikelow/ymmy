@@ -1,14 +1,15 @@
 #include "YmmyEditor.h"
 #include "YmmyProcessor.h"
-#include "SynthComponent.h"
-#include "FluidSynthComponent.h"
+#include "synths/SynthComponent.h"
+#include "synths/fluidsynth/FluidSynthComponent.h"
 
 YmmyEditor::YmmyEditor(YmmyProcessor& p, juce::AudioProcessorValueTreeState& vts)
-    : AudioProcessorEditor(&p), audioProcessor(p), valueTreeState(vts) {
+    : AudioProcessorEditor(&p), audioProcessor(p), valueTreeState(vts),
+      midiKeyboard(p.keyboardState, MidiKeyboardComponent::horizontalKeyboard) {
   // This is where our plugin’s editor size is set.
   setSize(960, 540);
   //
-  //    // these define the parameters of our slider object
+  //    // these define the parameters of our component object
   //    midiVolume.setSliderStyle (juce::Slider::LinearBarVertical);
   //    midiVolume.setRange (0.0, 127.0, 1.0);
   //    midiVolume.setTextBoxStyle (juce::Slider::NoTextBox, false, 90, 0);
@@ -16,11 +17,17 @@ YmmyEditor::YmmyEditor(YmmyProcessor& p, juce::AudioProcessorValueTreeState& vts
   //    midiVolume.setTextValueSuffix (" Volume");
   //    midiVolume.setValue(1.0);
   //
-  //    // this function adds the slider to the editor
+  //    // this function adds the component to the editor
   //    addAndMakeVisible (&midiVolume);
   //
-  //    // add the listener to the slider
+  //    // add the listener to the component
   //    midiVolume.addListener (this);
+
+  midiKeyboard.setName ("MIDI Keyboard");
+  midiKeyboard.setWantsKeyboardFocus(false);
+  setWantsKeyboardFocus(true);
+  addAndMakeVisible(midiKeyboard);
+
   setCurrentSynth(FluidSynth);
 }
 
@@ -52,15 +59,17 @@ void YmmyEditor::sliderValueChanged(juce::Slider* slider) {
 }
 
 void YmmyEditor::resized() {
-  // sets the position and size of the slider with arguments (x, y, width, height)
+  // sets the position and size of the component with arguments (x, y, width, height)
   //    midiVolume.setBounds (40, 30, 20, getHeight() - 60);
 
   auto area = getLocalBounds();
   auto synth = currentSynth.get();
   if (synth) {
     //      synth->setBounds(area.removeFromTop(200));
-    synth->setBounds(area.removeFromBottom(area.getHeight() - headerHeight));
+    synth->setBounds(0, headerHeight, area.getWidth(), area.getHeight() - headerHeight - keyboardHeight);
+//    synth->setBounds(area.removeFromBottom(area.getHeight() - headerHeight - keyboardHeight));
   }
+  midiKeyboard.setBounds(0, getHeight()-keyboardHeight, getWidth(), keyboardHeight);
 }
 
 void YmmyEditor::paint(juce::Graphics& g) {

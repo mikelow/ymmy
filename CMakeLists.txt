@@ -53,8 +53,11 @@ target_sources(${PROJECT_NAME}
   PRIVATE
     "${SRC_DIR}/YmmyProcessor.cpp"
     "${SRC_DIR}/YmmyEditor.cpp"
-    "${SRC_DIR}/SynthComponent.cpp"
-    "${SRC_DIR}/FluidSynthComponent.cpp"
+    "${SRC_DIR}/components/FilePicker.cpp"
+    "${SRC_DIR}/synths/Synth.cpp"
+    "${SRC_DIR}/synths/SynthComponent.cpp"
+    "${SRC_DIR}/synths/fluidsynth/FluidSynthComponent.cpp"
+    "${SRC_DIR}/synths/fluidsynth/FluidSynthSynth.cpp"
 )
 
 # Create ymmy_network library to provide plugin network interface

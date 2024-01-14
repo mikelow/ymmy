@@ -11,6 +11,7 @@ class YmmyEditor : public juce::AudioProcessorEditor, private juce::Slider::List
 public:
   // Constants
   static constexpr int headerHeight = 50;
+  static constexpr int keyboardHeight = 60;
 
   YmmyEditor(YmmyProcessor&, juce::AudioProcessorValueTreeState&);
   ~YmmyEditor();
@@ -30,6 +31,7 @@ private:
   std::unique_ptr<SynthComponent> currentSynth;
 
   juce::Slider midiVolume;  // [1]
+  juce::MidiKeyboardComponent midiKeyboard;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(YmmyEditor)
 };
