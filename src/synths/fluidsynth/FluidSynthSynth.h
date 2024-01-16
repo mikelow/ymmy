@@ -4,14 +4,16 @@
 #include "fluidsynth.h"
 
 namespace FluidSynthParam {
-  const juce::String MIDI_VOLUME = "fs.midiVolume";
-  const juce::String FILTER_RESONANCE = "fs.filterResonance";
-  const juce::String FILTER_CUT_OFF = "fs.filterCutOff";
-  const juce::String ATTACK_RATE = "fs.attackRate";
-  const juce::String HOLD = "fs.hold";
-  const juce::String DECAY_RATE = "fs.decayRate";
-  const juce::String SUSTAIN_LEVEL = "fs.sustainLevel";
-  const juce::String RELEASE_RATE = "fs.releaseRate";
+  extern const juce::String FILTER_RESONANCE;
+  extern const juce::String FILTER_CUT_OFF;
+  extern const juce::String ATTACK_RATE;
+  extern const juce::String HOLD;
+  extern const juce::String DECAY_RATE;
+  extern const juce::String SUSTAIN_LEVEL;
+  extern const juce::String RELEASE_RATE;
+
+  extern IntParameter parameters[];
+  extern std::map<juce::String, IntParameter> paramIdToParam;
 }
 
 class FluidSynthSynth: public Synth,

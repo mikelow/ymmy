@@ -21,13 +21,14 @@ private:
   void paint (juce::Graphics& g) override;
 
 //  YmmySlider midiVolumeSlider;
+  FilePicker fileChooser;
+
   YmmySlider attackSlider;
   YmmySlider holdSlider;
   YmmySlider decaySlider;
   YmmySlider sustainSlider;
   YmmySlider releaseSlider;
 //  juce::Slider midiVolumeSlider;
-  FilePicker fileChooser;
 
 //  std::unique_ptr<SliderAttachment> sliderAttachment;
 };

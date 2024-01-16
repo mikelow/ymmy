@@ -14,29 +14,47 @@ constexpr int NUM_CHANNELS = 48;
 fluid_long_long_t fileOffset;
 fluid_long_long_t fileSize;
 
-//std::map<fluid_midi_control_change, juce::String> controllerToParam = {
-//    {VOLUME_MSB, FluidSynthParam::MIDI_VOLUME},
-//    {SOUND_CTRL2, FluidSynthParam::FILTER_RESONANCE}, // MIDI CC 71 Timbre/Harmonic Intensity (filter resonance)
-//    {SOUND_CTRL3, FluidSynthParam::RELEASE_RATE}, // MIDI CC 72 Release time
-//    {SOUND_CTRL4, FluidSynthParam::ATTACK_RATE}, // MIDI CC 73 Attack time
-//    {SOUND_CTRL5, FluidSynthParam::FILTER_CUT_OFF}, // MIDI CC 74 Brightness (cutoff frequency, FILTERFC)
-//    {SOUND_CTRL6, FluidSynthParam::DECAY_RATE}, // MIDI CC 75 Decay Time
-//    {SOUND_CTRL9, FluidSynthParam::HOLD}, // MIDI CC 73 Attack time
-//    {SOUND_CTRL10, FluidSynthParam::SUSTAIN_LEVEL} // MIDI CC 79 undefined
-//};
+namespace FluidSynthParam {
+  const juce::String FILTER_RESONANCE = "fs.filterResonance";
+  const juce::String FILTER_CUT_OFF = "fs.filterCutOff";
+  const juce::String ATTACK_RATE = "fs.attackRate";
+  const juce::String HOLD = "fs.hold";
+  const juce::String DECAY_RATE = "fs.decayRate";
+  const juce::String SUSTAIN_LEVEL = "fs.sustainLevel";
+  const juce::String RELEASE_RATE = "fs.releaseRate";
+
+  IntParameter parameters[] = {
+      {FluidSynthParam::ATTACK_RATE, "Attack Time", -12000, 8000, -12000},
+      {FluidSynthParam::HOLD, "Attack Time", -12000, 5000, -12000},
+      {FluidSynthParam::DECAY_RATE, "Decay Time", -12000, 8000, -12000},
+      {FluidSynthParam::SUSTAIN_LEVEL, "Sustain Level", 0, 1440, 0},
+      {FluidSynthParam::RELEASE_RATE, "Release Rate", -12000, 8000, -12000},
+  };
+
+  static std::map<juce::String, IntParameter> createParamIdMap() {
+    std::map<juce::String, IntParameter> paramIdMap;
+    for (const auto& param : parameters) {
+      paramIdMap[param.id] = param;
+    }
+    return paramIdMap;
+  }
+
+  std::map<juce::String, IntParameter> paramIdToParam = createParamIdMap();
+}
+
 
 std::map<fluid_gen_type, juce::String> controllerToParam = {
 //    {VOLUME_MSB, FluidSynthParam::MIDI_VOLUME},
-    {GEN_FILTERQ, FluidSynthParam::FILTER_RESONANCE}, // MIDI CC 71 Timbre/Harmonic Intensity (filter resonance)
-    {GEN_VOLENVRELEASE, FluidSynthParam::RELEASE_RATE}, // MIDI CC 72 Release time
-    {GEN_VOLENVATTACK, FluidSynthParam::ATTACK_RATE}, // MIDI CC 73 Attack time
-    {GEN_FILTERFC, FluidSynthParam::FILTER_CUT_OFF}, // MIDI CC 74 Brightness (cutoff frequency, FILTERFC)
-    {GEN_VOLENVDECAY, FluidSynthParam::DECAY_RATE}, // MIDI CC 75 Decay Time
-    {GEN_VOLENVHOLD, FluidSynthParam::HOLD}, // MIDI CC 73 Attack time
-    {GEN_VOLENVSUSTAIN, FluidSynthParam::SUSTAIN_LEVEL} // MIDI CC 79 undefined
+    {GEN_FILTERFC, FluidSynthParam::FILTER_CUT_OFF},
+    {GEN_FILTERQ, FluidSynthParam::FILTER_RESONANCE},
+    {GEN_VOLENVATTACK, FluidSynthParam::ATTACK_RATE},
+    {GEN_VOLENVHOLD, FluidSynthParam::HOLD},
+    {GEN_VOLENVDECAY, FluidSynthParam::DECAY_RATE},
+    {GEN_VOLENVSUSTAIN, FluidSynthParam::SUSTAIN_LEVEL},
+    {GEN_VOLENVRELEASE, FluidSynthParam::RELEASE_RATE}
 };
 
-std::map<juce::String, fluid_gen_type> createInverseMap() {
+static std::map<juce::String, fluid_gen_type> createInverseMap() {
   std::map<juce::String, fluid_gen_type> inverseMap;
   for (const auto& pair : controllerToParam) {
     inverseMap[pair.second] = pair.first;
@@ -156,178 +174,90 @@ void FluidSynthSynth::initialize() {
   for (const auto &[controller, param]: controllerToParam) {
       setControllerValue(static_cast<int>(controller), 0);
   }
+    fluid_mod_t *my_mod = new_fluid_mod();
+    fluid_mod_set_source2(my_mod, FLUID_MOD_NONE, 0);
 
-  // http://www.synthfont.com/SoundFont_NRPNs.PDF
-      float env_amount{20000.0f};
+    // It is possible to set generator values (which includes the volume envelope ADSR parameters) by using
+    // nrpn controller messages. The specific on how this is done are explained in the SF 2.01 spec in section 9.6.
+    // Generally, the process is to pass the following controller events:
+    //   NPRN_SELECT_MSB 120
+    //   NRPN_SELECT_LSB <generator_num> (ex: 34 - GEN_VOLENVATTACK)
+    //   DATA_ENTRY_LSB <7 bit lsb>
+    //   DATA_ENTRY_MSB <7 bit msb>
+    // The 14 bit value should conform to the generator value range in section 8.1.3.
+    // There are two complications we must handle:
+    //   * First, per section 9.6.3, the value might need to be scaled down if it is for a value range that
+    //     exceeds 14bits. This "nrpn-scale" value is defined for each generator in the
+    //     fluid_gen_info[] array in fluid_gen.c.
+    //   * Second, also per section 9.6.3, the zero offset for the 14 bit values is 0x2000. Therefore, we need to
+    //     add 8192 to the final value.
+    // For example, GEN_VOLENVATTACK has a range defined in 8.1.3 as -12000 to 8000 timecents. Since this range
+    // exceeds 14bits, we see it has a nrpn_scale of 2. Therefore, the value range for a nrpn event will be
+    // -6000 to 4000. Additionally, we must add 8192, so the actual value range we must pass is: 2192 to 12192.
 
+    // The SF 2.01 spec states that both modulator and nrpn values should be additive to generator values (9.6.3),
+    // meaning that the volume envelope defined in the SF file will not be overridden but added to. For our purposes,
+    // this is breaking. There are VGM sequence formats where sequence events can override the ADSR envelope values
+    // entirely. Ymmy is therefore using a modified version of FluidSynth that will override the SF-defined generator
+    // values when nrpn events are received.
 
-      fluid_mod_t *my_mod = new_fluid_mod();
-      fluid_mod_set_source2(my_mod, FLUID_MOD_NONE, 0);
-      fluid_mod_set_amount(my_mod, 12000);
+    // The following modulator definitions are included (and commented out here) in case we consider allowing
+    // ADSR envelope control via semi-standard controller events (not just nrpn).
 
-//      fluid_mod_set_source2(my_mod, FLUID_MOD_NONE, 0);
-//      fluid_mod_set_dest(my_mod, GEN_ATTENUATION);
-//      fluid_mod_set_amount(my_mod, 960 * 0.4);
-
-      {
-        fluid_mod_set_source1(my_mod,
-                              SOUND_CTRL4,
-                              FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_BIPOLAR | FLUID_MOD_POSITIVE);
-        fluid_mod_set_dest(my_mod, GEN_VOLENVATTACK);
-        fluid_mod_set_amount(my_mod, 12000);
-        fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-      }
-
-      {
-        fluid_mod_set_source1(my_mod,
-                              SOUND_CTRL9,
-                              FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_UNIPOLAR | FLUID_MOD_POSITIVE);
-        fluid_mod_set_dest(my_mod, GEN_VOLENVHOLD);
-        fluid_mod_set_amount(my_mod, 12000);
-        fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-      }
-
-      {
-        fluid_mod_set_source1(my_mod,
-                              SOUND_CTRL6,
-                              FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_BIPOLAR | FLUID_MOD_POSITIVE);
-        fluid_mod_set_dest(my_mod, GEN_VOLENVDECAY);
-        fluid_mod_set_amount(my_mod, 12000);
-        fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-      }
-
-      {
-        fluid_mod_set_source1(my_mod,
-                              SOUND_CTRL3,
-                              FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_BIPOLAR | FLUID_MOD_POSITIVE);
-        fluid_mod_set_dest(my_mod, GEN_VOLENVRELEASE);
-        fluid_mod_set_amount(my_mod, 12000);
-        fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-      }
-
-//      {
-//        fluid_mod_set_source1(my_mod,
-//                              SOUND_CTRL10,
-//                              FLUID_MOD_CC | FLUID_MOD_CONVEX | FLUID_MOD_UNIPOLAR | FLUID_MOD_NEGATIVE);
-//        fluid_mod_set_dest(my_mod, GEN_VOLENVSUSTAIN);
-//        fluid_mod_set_amount(my_mod, 1000/*cB*/);
-//        fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-//      }
-      {
-        fluid_mod_set_source1(my_mod,
-                              SOUND_CTRL10,
-                              FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_UNIPOLAR | FLUID_MOD_POSITIVE);
-        fluid_mod_set_dest(my_mod, GEN_VOLENVSUSTAIN);
-        fluid_mod_set_amount(my_mod, 1440/*cB*/);
-        fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-      }
-
-//      std::unique_ptr<fluid_mod_t, decltype(&delete_fluid_mod)> mod{new_fluid_mod(), delete_fluid_mod};
-//      fluid_mod_set_source1(mod.get(),
-//                            static_cast<int>(SOUND_CTRL2), // MIDI CC 71 Timbre/Harmonic Intensity (filter resonance)
-//                            FLUID_MOD_CC
-//                            | FLUID_MOD_UNIPOLAR
-//                            | FLUID_MOD_CONCAVE
-//                            | FLUID_MOD_POSITIVE);
-//      fluid_mod_set_source2(mod.get(), 0, 0);
-//      fluid_mod_set_dest(mod.get(), GEN_FILTERQ);
-//      fluid_mod_set_amount(mod.get(), FLUID_PEAK_ATTENUATION);
-//      fluid_synth_add_default_mod(synth.get(), mod.get(), FLUID_SYNTH_ADD);
+//  {
+//    fluid_mod_set_source1(my_mod,
+//                          14, //SOUND_CTRL4,
+//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_BIPOLAR | FLUID_MOD_POSITIVE);
+//    fluid_mod_set_dest(my_mod, GEN_VOLENVATTACK);
+//    fluid_mod_set_amount(my_mod, 12000);
+//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
+//  }
 //
-//      mod = {new_fluid_mod(), delete_fluid_mod};
-//      fluid_mod_set_source1(mod.get(),
-//                            static_cast<int>(SOUND_CTRL3), // MIDI CC 72 Release time
-//                            FLUID_MOD_CC
-//                            | FLUID_MOD_UNIPOLAR
-//                            | FLUID_MOD_LINEAR
-//                            | FLUID_MOD_POSITIVE);
-//      fluid_mod_set_source2(mod.get(), 0, 0);
-//      fluid_mod_set_dest(mod.get(), GEN_VOLENVRELEASE);
-//      fluid_mod_set_amount(mod.get(), env_amount);
-//      fluid_synth_add_default_mod(synth.get(), mod.get(), FLUID_SYNTH_ADD);
+//  {
+//    fluid_mod_set_source1(my_mod,
+//                          15, //SOUND_CTRL9,
+//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_UNIPOLAR | FLUID_MOD_POSITIVE);
+//    fluid_mod_set_dest(my_mod, GEN_VOLENVHOLD);
+//    fluid_mod_set_amount(my_mod, 12000);
+//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
+//  }
 //
-//      mod = {new_fluid_mod(), delete_fluid_mod};
-//      fluid_mod_set_source1(mod.get(),
-//                            static_cast<int>(SOUND_CTRL4), // MIDI CC 73 Attack time
-//                            FLUID_MOD_CC
-//                            | FLUID_MOD_UNIPOLAR
-//                            | FLUID_MOD_LINEAR
-//                            | FLUID_MOD_POSITIVE);
-//      fluid_mod_set_source2(mod.get(), 0, 0);
-//      fluid_mod_set_dest(mod.get(), GEN_VOLENVATTACK);
-//      fluid_mod_set_amount(mod.get(), env_amount);
-//      fluid_synth_add_default_mod(synth.get(), mod.get(), FLUID_SYNTH_ADD);
+//  {
+//    fluid_mod_set_source1(my_mod,
+//                          16, //SOUND_CTRL6,
+//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_BIPOLAR | FLUID_MOD_POSITIVE);
+//    fluid_mod_set_dest(my_mod, GEN_VOLENVDECAY);
+//    fluid_mod_set_amount(my_mod, 12000);
+//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
+//  }
 //
-//      // soundfont spec says that if cutoff is >20kHz and resonance Q is 0, then no filtering occurs
-//      mod = {new_fluid_mod(), delete_fluid_mod};
-//      fluid_mod_set_source1(mod.get(),
-//                            static_cast<int>(SOUND_CTRL5), // MIDI CC 74 Brightness (cutoff frequency, FILTERFC)
-//                            FLUID_MOD_CC
-//                            | FLUID_MOD_LINEAR
-//                            | FLUID_MOD_UNIPOLAR
-//                            | FLUID_MOD_POSITIVE);
-//          fluid_mod_set_source2(mod.get(), 0, 0);
-//      fluid_mod_set_dest(mod.get(), GEN_FILTERFC);
-//      fluid_mod_set_amount(mod.get(), -2400.0f);
-//      fluid_synth_add_default_mod(synth.get(), mod.get(), FLUID_SYNTH_ADD);
+//  {
+//    fluid_mod_set_source1(my_mod,
+//                          17, //SOUND_CTRL10,
+//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_UNIPOLAR | FLUID_MOD_POSITIVE);
+//    fluid_mod_set_dest(my_mod, GEN_VOLENVSUSTAIN);
+//    fluid_mod_set_amount(my_mod, 1440/*cB*/);
+//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
+//  }
 //
-//      mod = {new_fluid_mod(), delete_fluid_mod};
-//      fluid_mod_set_source1(mod.get(),
-//                            static_cast<int>(SOUND_CTRL6), // MIDI CC 75 Decay Time
-//                            FLUID_MOD_CC
-//                            | FLUID_MOD_UNIPOLAR
-//                            | FLUID_MOD_LINEAR
-//                            | FLUID_MOD_POSITIVE);
-//      fluid_mod_set_source2(mod.get(), 0, 0);
-//      fluid_mod_set_dest(mod.get(), GEN_VOLENVDECAY);
-//      fluid_mod_set_amount(mod.get(), env_amount);
-//      fluid_synth_add_default_mod(synth.get(), mod.get(), FLUID_SYNTH_ADD);
-//
-//      mod = {new_fluid_mod(), delete_fluid_mod};
-////      fluid_mod_set_source1(mod.get(),
-////                            static_cast<int>(SOUND_CTRL10), // MIDI CC 79 undefined
-////                            FLUID_MOD_CC
-////                            | FLUID_MOD_UNIPOLAR
-////                            | FLUID_MOD_LINEAR
-//////                            | FLUID_MOD_CONCAVE
-////                            | FLUID_MOD_POSITIVE);
-////      fluid_mod_set_source2(mod.get(), 0, 0);
-////      fluid_mod_set_dest(mod.get(), GEN_VOLENVSUSTAIN);
-////      // fluice_voice.c#fluid_voice_update_param()
-////      // clamps the range to between 0 and 1000, so we'll copy that
-////      fluid_mod_set_amount(mod.get(), 1000.0f);
-////      fluid_synth_add_default_mod(synth.get(), mod.get(), FLUID_SYNTH_ADD);
-//      fluid_mod_set_source1(mod.get(),
-//                            static_cast<int>(SOUND_CTRL10),
-//                            FLUID_MOD_CC | FLUID_MOD_CONVEX | FLUID_MOD_UNIPOLAR | FLUID_MOD_NEGATIVE);
-//      fluid_mod_set_dest(mod.get(), GEN_VOLENVSUSTAIN);
-//      fluid_mod_set_amount(mod.get(), 60/*cB*/);
-//      fluid_synth_add_default_mod(synth.get(), mod.get(), FLUID_SYNTH_OVERWRITE);
+//  {
+//    fluid_mod_set_source1(my_mod,
+//                          18, //SOUND_CTRL3,
+//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_BIPOLAR | FLUID_MOD_POSITIVE);
+//    fluid_mod_set_dest(my_mod, GEN_VOLENVRELEASE);
+//    fluid_mod_set_amount(my_mod, 12000);
+//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
+//  }
 
+  delete_fluid_mod(my_mod);
 }
 
 std::unique_ptr<juce::AudioProcessorParameterGroup> FluidSynthSynth::createParameterGroup() {
   auto fluidSynthParams = std::make_unique<juce::AudioProcessorParameterGroup>("fluidsynth", "FluidSynth", "|");
-//  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterFloat>("midiVolume", "MIDI Volume", 0.0f, 127.0f, 1.0f));
-//  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterFloat>("attackRate", "Attack Rate", 0.0f, 127.0f, 1.0f));
-//  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterFloat>("decayRate", "Decay Rate", 0.0f, 127.0f, 1.0f));
-//  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterFloat>("sustainLevel", "Sustain Level", 0.0f, 127.0f, 1.0f));
-//  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterFloat>("releaseRate", "Release Rate", 0.0f, 127.0f, 1.0f));
-  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterInt>(FluidSynthParam::MIDI_VOLUME, "MIDI Volume", 0, 127, 1));
-  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterInt>(FluidSynthParam::ATTACK_RATE, "Attack Time", -12000, 8000, 1));
-  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterInt>(FluidSynthParam::HOLD, "Hold Time", -12000, 5000, 1));
-  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterInt>(FluidSynthParam::DECAY_RATE, "Decay Time", -12000, 8000, 1));
-  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterInt>(FluidSynthParam::SUSTAIN_LEVEL, "Sustain Level", 0, 1440, 1));
-  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterInt>(FluidSynthParam::RELEASE_RATE, "Release Rate", -12000, 8000, 1));
 
-//  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterFloat>("fs.soundFont", "MIDI Volume", 0.0f, 127.0f, 1.0f));
-
-//  valueTreeState.state.appendChild({ "soundFont", {
-//                                                     { "path", "" },
-//                                                     { "memfile", var(nullptr, 0) }
-//                                                 }, {} }, nullptr);
-  // no properties, no subtrees (yet)
-//  valueTreeState.state.appendChild({ "banks", {}, {} }, nullptr);
+  for (IntParameter p : FluidSynthParam::parameters) {
+    fluidSynthParams->addChild(std::make_unique<juce::AudioParameterInt>(p.id, p.name, p.min, p.max, p.defaultVal));
+  }
   return fluidSynthParams;
 }
 
@@ -520,11 +450,20 @@ void FluidSynthSynth::parameterChanged(const String& parameterID, float newValue
     jassert(dynamic_cast<AudioParameterInt*>(param) != nullptr);
     AudioParameterInt* castParam{dynamic_cast<AudioParameterInt*>(param)};
     int value{castParam->get()};
-    int controllerNumber{static_cast<int>(it->second)};
+//    int controllerNumber{static_cast<int>(it->second)};
+    int generatorNumber{static_cast<int>(it->second)};
 
-    fluid_synth_set_gen(synth.get(), selectedChannel, controllerNumber, static_cast<float>(value));
+    printf("PARAMETER CHANGED: %d\n", generatorNumber);
+    fluid_synth_set_gen_override(synth.get(), selectedChannel, generatorNumber, static_cast<float>(value));
 //    fluid_voice_gen_set(synth.get(), controllerNumber, static_cast<float>(value));
 
+//    fluid_synth_cc(synth.get(), selectedChannel, NRPN_MSB, 120);
+//    fluid_synth_cc(synth.get(), selectedChannel, NRPN_LSB, generatorNumber);
+//    value += 8192;
+//    fluid_synth_cc(synth.get(), selectedChannel, DATA_ENTRY_LSB, value & 0x7F);
+//    fluid_synth_cc(synth.get(), selectedChannel, DATA_ENTRY_MSB, (value>>7) & 0x7F);
+
+//    fluid_synth_cc(synth.get(), selectedChannel, controllerNumber+32, value);
 //    fluid_synth_cc(synth.get(), selectedChannel, controllerNumber, value);
   }
 }

@@ -1,35 +1,28 @@
 #include "FluidSynthComponent.h"
-// #include "juce_gui_basics/widgets/juce_Slider.h"
 #include "JuceHeader.h"
 #include "FluidSynthSynth.h"
-#include "../../MidiConstants.h"
 
 
 FluidSynthComponent::FluidSynthComponent(juce::AudioProcessorValueTreeState& valueTreeState)
     : SynthComponent(valueTreeState),
-//      midiVolumeSlider(vts, "fs.midiVolume"),
-//      attackSlider(vts, "fs.attackRate"),
-//      decaySlider(vts, "fs.decayRate"),
-//      sustainSlider(vts, "fs.sustainLevel"),
-//      releaseSlider(vts, "fs.releaseRate"),
-
-//      midiVolumeSlider(vts, FluidSynthParam::MIDI_VOLUME),
+      fileChooser(valueTreeState),
       attackSlider(vts, FluidSynthParam::ATTACK_RATE),
       holdSlider(vts, FluidSynthParam::HOLD),
       decaySlider(vts, FluidSynthParam::DECAY_RATE),
       sustainSlider(vts, FluidSynthParam::SUSTAIN_LEVEL),
-      releaseSlider(vts, FluidSynthParam::RELEASE_RATE),
-
+      releaseSlider(vts, FluidSynthParam::RELEASE_RATE)
+{
 //      fileChooser("File", File(), true, false, false, "*.sf2;*.sf3", String(),
 //       "Choose a Soundfont file to load into the synthesizer") {
-      fileChooser(valueTreeState) {
 //  midiVolumeSlider.component.setTextValueSuffix(" Volume");
 
   addAndMakeVisible(fileChooser);
 
-  for (auto& s : {&attackSlider, &holdSlider, &decaySlider, &sustainSlider, &releaseSlider}) {
-    s->component.setRange(-12000, 8000, 1);
-    addAndMakeVisible(s);
+  // Set the slider range values and add them to the UI
+  for (auto& slider : {&attackSlider, &holdSlider, &decaySlider, &sustainSlider, &releaseSlider}) {
+    auto& param = FluidSynthParam::paramIdToParam[slider->paramId];
+    slider->component.setRange(param.min, param.max, 1);
+    addAndMakeVisible(slider);
   }
 }
 
@@ -53,20 +46,6 @@ void FluidSynthComponent::resized() {
     ++i;
   }
 }
-
-//void FluidSynthComponent::sliderValueChanged(juce::Slider* component) {
-//  printf("component value changed");
-//  midiVolumeSlider.getValue();
-//  auto* param = vts.getParameter("fs.midiVolume");
-//  if (param != nullptr) {
-//    // Get the current value of the parameter
-//    printf(" value is: %f\n", param->getValue());
-//  } else {
-//    printf(" null val");
-//  }
-//
-//  //  audioProcessor.noteOnVel = midiVolume.getValue();
-//}
 
 void FluidSynthComponent::paint(juce::Graphics& g) {
   // fill the whole window white

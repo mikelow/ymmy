@@ -2,6 +2,14 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 
+struct IntParameter {
+  juce::String id;
+  juce::String name;
+  int min;
+  int max;
+  int defaultVal;
+};
+
 class Synth {
 public:
   Synth(AudioProcessorValueTreeState& valueTreeState);
