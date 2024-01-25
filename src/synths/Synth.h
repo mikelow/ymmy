@@ -21,6 +21,7 @@ public:
   virtual int getCurrentProgram() = 0;
   virtual void setCurrentProgram (int index) = 0;
   virtual const juce::String getProgramName (int index) = 0;
+
 protected:
   static int CheckForChannelGroupSysExEvent(MidiMessage& message);
 

@@ -25,7 +25,7 @@ namespace FluidSynthParam {
 
   IntParameter parameters[] = {
       {FluidSynthParam::ATTACK_RATE, "Attack Time", -12000, 8000, -12000},
-      {FluidSynthParam::HOLD, "Attack Time", -12000, 5000, -12000},
+      {FluidSynthParam::HOLD, "Hold Time", -12000, 5000, -12000},
       {FluidSynthParam::DECAY_RATE, "Decay Time", -12000, 8000, -12000},
       {FluidSynthParam::SUSTAIN_LEVEL, "Sustain Level", 0, 1440, 0},
       {FluidSynthParam::RELEASE_RATE, "Release Rate", -12000, 8000, -12000},
@@ -43,7 +43,7 @@ namespace FluidSynthParam {
 }
 
 
-std::map<fluid_gen_type, juce::String> controllerToParam = {
+std::map<fluid_gen_type, juce::String> generatorToParam = {
 //    {VOLUME_MSB, FluidSynthParam::MIDI_VOLUME},
     {GEN_FILTERFC, FluidSynthParam::FILTER_CUT_OFF},
     {GEN_FILTERQ, FluidSynthParam::FILTER_RESONANCE},
@@ -56,13 +56,13 @@ std::map<fluid_gen_type, juce::String> controllerToParam = {
 
 static std::map<juce::String, fluid_gen_type> createInverseMap() {
   std::map<juce::String, fluid_gen_type> inverseMap;
-  for (const auto& pair : controllerToParam) {
+  for (const auto& pair : generatorToParam) {
     inverseMap[pair.second] = pair.first;
   }
   return inverseMap;
 }
 
-std::map<juce::String, fluid_gen_type> paramToController = createInverseMap();
+std::map<juce::String, fluid_gen_type> paramToGenerator = createInverseMap();
 
 
 
@@ -105,21 +105,23 @@ fluid_long_long_t mem_tell(void *handle) {
 }
 
 FluidSynthSynth::FluidSynthSynth(AudioProcessorValueTreeState& valueTreeState)
-    : Synth(valueTreeState), settings{nullptr, nullptr}, synth{nullptr, nullptr}, channelGroup(0),
+    : Synth(valueTreeState), settings{nullptr, nullptr}, synth{nullptr, nullptr},
+      channelGroup(0),
       currentSampleRate(44100), sfont_id(-1) {
   initialize();
 
+  vts.state.addListener(this);
+
+  vts.addParameterListener("selectedChannel", this);
   vts.addParameterListener("bank", this);
   vts.addParameterListener("preset", this);
-  for (const auto &[param, controller]: paramToController) {
+  for (const auto &[param, genId]: paramToGenerator) {
     vts.addParameterListener(param, this);
   }
-
-  vts.state.addListener(this);
 }
 
 FluidSynthSynth::~FluidSynthSynth() {
-  for (const auto &[param, controller]: paramToController) {
+  for (const auto &[param, genId]: paramToGenerator) {
     vts.removeParameterListener(param, this);
   }
   vts.removeParameterListener("bank", this);
@@ -171,8 +173,8 @@ void FluidSynthSynth::initialize() {
   // i.e. we are forced to start at 0 and climb from there
   // --
   // let's zero out every audio param that we manage
-  for (const auto &[controller, param]: controllerToParam) {
-      setControllerValue(static_cast<int>(controller), 0);
+  for (const auto &[genId, param]: generatorToParam) {
+      setControllerValue(static_cast<int>(genId), 0);
   }
     fluid_mod_t *my_mod = new_fluid_mod();
     fluid_mod_set_source2(my_mod, FLUID_MOD_NONE, 0);
@@ -261,13 +263,34 @@ std::unique_ptr<juce::AudioProcessorParameterGroup> FluidSynthSynth::createParam
   return fluidSynthParams;
 }
 
-void FluidSynthSynth::updateValueTreeState(AudioProcessorValueTreeState& vts) {
-  vts.state.appendChild({ "soundFont",
-                          {
-                            { "path", "" },
-                            { "memfile", var(nullptr, 0) }
-                          }, {} }, nullptr);
-  vts.state.appendChild({ "banks", {}, {} }, nullptr);
+//void FluidSynthSynth::updateValueTreeState(AudioProcessorValueTreeState& vts) {
+//  vts.state.appendChild({ "soundFont",
+//                          {
+//                            { "path", "" },
+//                            { "memfile", var(nullptr, 0) }
+//                          }, {} }, nullptr);
+//  vts.state.appendChild({ "banks", {}, {} }, nullptr);
+//
+//  vts.state.appendChild({ "test",
+//                         {
+//                             { "fun", "" },
+//                         }, {} }, nullptr);
+//}
+
+//const std::vector<ValueTree> FluidSynthSynth::getInitialChildValueTrees() {
+const ValueTree FluidSynthSynth::getInitialChildValueTree() {
+  return
+    { "ignoredRoot", {},
+      {
+        { "soundFont",
+         {
+             { "path", "" },
+             { "memfile", var(nullptr, 0) }
+         }, {}
+        },
+        { "banks", {}, {} },
+      }
+    };
 }
 
 
@@ -443,8 +466,8 @@ void FluidSynthSynth::parameterChanged(const String& parameterID, float newValue
       static_cast<unsigned int>(preset));
   } else if (
       // https://stackoverflow.com/a/55482091/5257399
-      auto it{paramToController.find(parameterID)};
-      it != end(paramToController)
+      auto it{paramToGenerator.find(parameterID)};
+      it != end(paramToGenerator)
     ) {
     RangedAudioParameter *param{vts.getParameter(parameterID)};
     jassert(dynamic_cast<AudioParameterInt*>(param) != nullptr);
@@ -484,6 +507,29 @@ void FluidSynthSynth::valueTreePropertyChanged(ValueTree& treeWhosePropertyHasCh
         unloadAndLoadFontFromMemory(memfile.getBinaryData()->getData(), dataSize);
       }
     }
+  } else if (treeWhosePropertyHasChanged.getType() == StringRef("settings")) {
+    if (property == StringRef("selectedChannel")) {
+      selectedChannel = treeWhosePropertyHasChanged.getProperty("selectedChannel", 0);
+
+      for (const auto &[param, genId]: paramToGenerator) {
+//        vts.addParameterListener(param, this);
+        auto p = vts.getParameter(param);
+        if (!p) {
+          continue;
+        }
+        auto paramVal = fluid_synth_get_gen(synth.get(), selectedChannel, genId);
+        printf("genID: %d: %f\n", genId, paramVal);
+        auto range = p->getNormalisableRange();
+        p->setValueNotifyingHost(range.convertTo0to1(paramVal));
+
+//        auto typeName = path.getType();
+//        auto propName = path.getPropertyName(0);
+//        Value value{vts.state.getChildWithName(typeName).getPropertyAsValue(propName, nullptr)};
+//        value.setValue(newValue);
+
+      }
+
+    }
   }
 }
 
@@ -497,7 +543,7 @@ void FluidSynthSynth::valueTreeRedirected (ValueTree& treeWhichHasBeenChanged) {
 
   vts.addParameterListener("bank", this);
   vts.addParameterListener("preset", this);
-  for (const auto &[param, controller]: paramToController) {
+  for (const auto &[param, genId]: paramToGenerator) {
     vts.addParameterListener(param, this);
   }
 

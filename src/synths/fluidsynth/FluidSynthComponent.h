@@ -1,19 +1,25 @@
 #pragma once
 
+#include "FluidSynthSynth.h"
 #include "../SynthComponent.h"
 #include "../../components/FilePicker.h"
 #include "../../components/YmmySlider.h"
 
-class FluidSynthComponent : public SynthComponent {
+class FluidSynthComponent : public SynthComponent,
+                            public AudioProcessorValueTreeState::Listener {
+//                            public ValueTree::Listener,
 //                            private juce::Slider::Listener {
 public:
   typedef juce::AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
 
-  explicit FluidSynthComponent(juce::AudioProcessorValueTreeState& valueTreeState);
+  FluidSynthComponent(juce::AudioProcessorValueTreeState& valueTreeState);
   ~FluidSynthComponent();
 
   void updateControls() override;
   void resized() override;
+
+  void parameterChanged(const String& parameterID, float newValue);
+  void valueTreePropertyChanged(ValueTree& treeWhosePropertyHasChanged, const Identifier& property);
 
 private:
 //  void sliderValueChanged (juce::Slider* component) override;
@@ -21,6 +27,8 @@ private:
   void paint (juce::Graphics& g) override;
 
 //  YmmySlider midiVolumeSlider;
+//  fluid_synth_t* synth;
+
   FilePicker fileChooser;
 
   YmmySlider attackSlider;
@@ -28,6 +36,10 @@ private:
   YmmySlider decaySlider;
   YmmySlider sustainSlider;
   YmmySlider releaseSlider;
+
+  YmmySlider* sliders[5];
+  IntParameter sliderParams[5];
+  std::map<juce::String, Component*> paramToComponent;
 //  juce::Slider midiVolumeSlider;
 
 //  std::unique_ptr<SliderAttachment> sliderAttachment;

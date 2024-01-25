@@ -4,6 +4,10 @@
 
 class Synth;
 
+struct YmmySettings {
+  int selectedChannel;
+};
+
 class YmmyProcessor : public AudioProcessor {
 public:
   static constexpr int maxChannels = 48;
@@ -46,13 +50,24 @@ public:
   void getStateInformation (juce::MemoryBlock& destData) override;
   void setStateInformation (const void* data, int sizeInBytes) override;
 
+  const ValueTree getInitialChildValueTree();
+//  void addSettingsToVTS();
+  void setVtsSettingsProperty(const juce::String& propertyName, const var& newValue);
+
+  inline Synth* getSelectedSynth() { return channelToSynthMap[settings.selectedChannel]; }
+
+  int getSelectedChannel() { return settings.selectedChannel; }
+  void setSelectedChannel(int chan);
+  void incrementChannel();
+  void decrementChannel();
+
   void addSynth(std::unique_ptr<Synth> synth);
   void removeSynth(Synth* synth);
 
   MidiKeyboardState keyboardState;
 
 private:
-  int currentChannel;
+  YmmySettings settings;
   std::vector<std::unique_ptr<Synth>> synths;
   std::unordered_map<int, Synth*> channelToSynthMap;
 //    std::unique_ptr<juce::AudioProcessorValueTreeState> state;

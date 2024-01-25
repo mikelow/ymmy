@@ -7,7 +7,11 @@ class SynthComponent;
 
 enum SynthType { FluidSynth, YM2151 };
 
-class YmmyEditor : public juce::AudioProcessorEditor, private juce::Slider::Listener {
+class YmmyEditor :
+    public AudioProcessorEditor,
+    public ValueTree::Listener,
+    private Slider::Listener,
+    private Button::Listener {
 public:
   // Constants
   static constexpr int headerHeight = 50;
@@ -20,18 +24,26 @@ public:
   void resized() override;
 
 private:
+  virtual void valueTreePropertyChanged (ValueTree& treeWhosePropertyHasChanged,
+                                        const Identifier& property) override;
   void setCurrentSynth(SynthType synthType);
   void sliderValueChanged(juce::Slider* slider) override;
+  void buttonClicked(Button* button) override;
 
   // This reference is provided as a quick way for your editor to
   // access the processor object that created it.
   YmmyProcessor& audioProcessor;
-  juce::AudioProcessorValueTreeState& valueTreeState;
+  AudioProcessorValueTreeState& valueTreeState;
 
   std::unique_ptr<SynthComponent> currentSynth;
 
-  juce::Slider midiVolume;  // [1]
-  juce::MidiKeyboardComponent midiKeyboard;
+  Slider midiVolume;  // [1]
+  MidiKeyboardComponent midiKeyboard;
+
+  Label channelLabel;
+  TextButton incChannelButton;
+  TextButton decChannelButton;
+
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(YmmyEditor)
 };

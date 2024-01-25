@@ -27,7 +27,8 @@ public:
 
 //  std::unique_ptr<juce::AudioProcessorParameterGroup> createParameterGroup() override;
   static std::unique_ptr<juce::AudioProcessorParameterGroup> createParameterGroup();
-  static void updateValueTreeState(AudioProcessorValueTreeState& vts);
+//  static void updateValueTreeState(AudioProcessorValueTreeState& vts);
+  static const ValueTree getInitialChildValueTree();
 
   void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
   void prepareToPlay (double sampleRate, int samplesPerBlock) override;

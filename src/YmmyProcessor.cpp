@@ -7,11 +7,13 @@
 YmmyProcessor::YmmyProcessor()
         : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
           vts{*this, nullptr, juce::Identifier ("YmmySettings"), createParameterLayout()},
-          channelGroup(0), currentChannel(1) {
+          channelGroup(0), settings{0} {
 
   addSynth(std::make_unique<FluidSynthSynth>(vts));
 
-  FluidSynthSynth::updateValueTreeState(vts);
+//  addSettingsToVTS();
+//  FluidSynthSynth::getInitialChildValueTree();
+//  FluidSynthSynth::updateValueTreeState(vts);
 }
 
 YmmyProcessor::~YmmyProcessor() {
@@ -23,79 +25,14 @@ void callCreateParameterLayout() {
 }
 
 AudioProcessorValueTreeState::ParameterLayout YmmyProcessor::createParameterLayout() {
-//  return {
-//std::make_unique<juce::AudioParameterFloat>("midiVolume", "MIDI Volume", 0.0f, 127.0f, 1.0f),
-//std::make_unique<juce::AudioParameterBool>("invertPhase", "Invert Phase", false)
-//  };
 
   // Root layout for the parameters
   juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-  std::make_unique<AudioParameterInt>("channel", "currently selected channel", 0, maxChannels, MidiConstants::midiMinValue, "Channel" );
+//  std::make_unique<AudioParameterInt>("channel", "currently selected channel", 0, maxChannels, MidiConstants::midiMinValue, "Channel" );
 
 
   auto fluidSynthParams = FluidSynthSynth::createParameterGroup();
-
-//  std::unique_ptr<AudioParameterInt> params[] {
-//      // SoundFont 2.4 spec section 7.2: zero through 127, or 128.
-//      std::make_unique<AudioParameterInt>("bank", "which bank is selected in the soundfont", MidiConstants::midiMinValue, 128, MidiConstants::midiMinValue, "Bank" ),
-//      // note: banks may be sparse, and lack a 0th preset. so defend against this.
-//      std::make_unique<AudioParameterInt>("preset", "which patch (aka patch, program, instrument) is selected in the soundfont", MidiConstants::midiMinValue, MidiConstants::midiMaxValue, MidiConstants::midiMinValue, "Preset" ),
-//      std::make_unique<AudioParameterInt>("midiVolume", "volume envelope attack time", MidiConstants::midiMinValue, MidiConstants::midiMaxValue, MidiConstants::midiMinValue, "A" ),
-//      std::make_unique<AudioParameterInt>("attackRate", "volume envelope attack time", MidiConstants::midiMinValue, MidiConstants::midiMaxValue, MidiConstants::midiMinValue, "A" ),
-//      std::make_unique<AudioParameterInt>("decayRate", "volume envelope sustain attentuation", MidiConstants::midiMinValue, MidiConstants::midiMaxValue, MidiConstants::midiMinValue, "D" ),
-//      std::make_unique<AudioParameterInt>("sustainLevel", "volume envelope decay time", MidiConstants::midiMinValue, MidiConstants::midiMaxValue, MidiConstants::midiMinValue, "S" ),
-//      std::make_unique<AudioParameterInt>("releaseRate", "volume envelope release time", MidiConstants::midiMinValue, MidiConstants::midiMaxValue, MidiConstants::midiMinValue, "R" ),
-//      std::make_unique<AudioParameterInt>("filterCutOff", "low-pass filter cut-off frequency", MidiConstants::midiMinValue, MidiConstants::midiMaxValue, MidiConstants::midiMinValue, "Cut" ),
-//      std::make_unique<AudioParameterInt>("filterResonance", "low-pass filter resonance attentuation", MidiConstants::midiMinValue, MidiConstants::midiMaxValue, MidiConstants::midiMinValue, "Res" ),
-//  };
-//
-//  return {
-//      make_move_iterator(begin(params)),
-//      make_move_iterator(end(params))
-//  };
-
-
-//  std::unique_ptr<AudioParameterInt> params[]{
-//      std::make_unique<AudioParameterInt>("midiVolume", "midi volume",
-//                                          MidiConstants::midiMinValue, MidiConstants::midiMaxValue,
-//                                          MidiConstants::midiMinValue, "Volume"),
-//      std::make_unique<AudioParameterInt>("attackRate", "volume envelope attack time",
-//                                          MidiConstants::midiMinValue, MidiConstants::midiMaxValue,
-//                                          MidiConstants::midiMinValue, "A"),
-//      std::make_unique<AudioParameterInt>("decayRate", "volume envelope sustain attentuation",
-//                                          MidiConstants::midiMinValue, MidiConstants::midiMaxValue,
-//                                          MidiConstants::midiMinValue, "D"),
-//      std::make_unique<AudioParameterInt>("sustainLevel", "volume envelope decay time",
-//                                          MidiConstants::midiMinValue, MidiConstants::midiMaxValue,
-//                                          MidiConstants::midiMinValue, "S"),
-//      std::make_unique<AudioParameterInt>("releaseRate", "volume envelope release time",
-//                                          MidiConstants::midiMinValue, MidiConstants::midiMaxValue,
-//                                          MidiConstants::midiMinValue, "R"),
-//////      std::make_unique<juce::AudioParameterFloat>("midiVolume", "Release Rate", 0.0f, 127.0f, 1.0f),
-//////      std::make_unique<juce::AudioParameterFloat>("attackRate", "Release Rate", 0.0f, 127.0f, 1.0f),
-//////      std::make_unique<juce::AudioParameterFloat>("sustainLevel", "Release Rate", 0.0f, 127.0f, 1.0f),
-//////      std::make_unique<juce::AudioParameterFloat>("decayRate", "Release Rate", 0.0f, 127.0f, 1.0f),
-//////      std::make_unique<juce::AudioParameterFloat>("releaseRate", "Release Rate", 0.0f, 127.0f, 1.0f)
-////
-////
-//  };
-////
-//  layout.add(
-//            make_move_iterator(begin(params)),
-//            make_move_iterator(end(params))
-//            );
-
-
-  // Create groups for each synth type
-//  auto fluidSynthParams = std::make_unique<juce::AudioProcessorParameterGroup>("fluidsynth", "FluidSynth", "|");
-//  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterFloat>("fs.midiVolume", "MIDI Volume", 0.0f, 127.0f, 1.0f));
-//  fluidSynthParams->addChild(std::make_unique<juce::AudioParameterFloat>("synthOneParam2", "Parameter 2", 0.0f, 127.0f, 64.0f));
-
-//  auto ym2151Params = std::make_unique<juce::AudioProcessorParameterGroup>("ym2151", "YM2151", "|");
-//  ym2151Params->addChild(std::make_unique<juce::AudioParameterFloat>("ym2151_synthTwoParam1", "Parameter 1", 0.0f, 1.0f, 0.5f));
-//  ym2151Params->addChild(std::make_unique<juce::AudioParameterFloat>("synthTwoParam2", "Parameter 2", 0.0f, 127.0f, 64.0f));
-
   // Add groups to the layout
   layout.add(std::move(fluidSynthParams));
 //  layout.add(std::move(ym2151Params));
@@ -187,18 +124,18 @@ double YmmyProcessor::getTailLengthSeconds() const {
 }
 
 int YmmyProcessor::getNumPrograms() {
-  if (channelToSynthMap.count(currentChannel) == 0) {
+  if (channelToSynthMap.count(settings.selectedChannel) == 0) {
     return 1;
   }
-  auto synth = channelToSynthMap[currentChannel];
+  auto synth = channelToSynthMap[settings.selectedChannel];
   return synth->getCurrentProgram();
 }
 
 int YmmyProcessor::getCurrentProgram() {
-  if (channelToSynthMap.count(currentChannel) == 0) {
+  if (channelToSynthMap.count(settings.selectedChannel) == 0) {
     return 0;
   }
-  auto synth = channelToSynthMap[currentChannel];
+  auto synth = channelToSynthMap[settings.selectedChannel];
   return synth->getCurrentProgram();
 }
 
@@ -211,7 +148,7 @@ void YmmyProcessor::setCurrentProgram (int index) {
 }
 
 const juce::String YmmyProcessor::getProgramName (int index) {
-  return {};
+  return getSelectedSynth()->getProgramName(index);
 }
 
 void YmmyProcessor::changeProgramName (int index, const juce::String& newName) {
@@ -262,108 +199,109 @@ juce::AudioProcessorEditor* YmmyProcessor::createEditor() {
 }
 
 void YmmyProcessor::getStateInformation (juce::MemoryBlock& destData) {
+
+  DBG(vts.state.toXmlString());
+
   auto state = vts.copyState();
+//  state.removeAllChildren(nullptr);
+//  state.removeAllProperties(nullptr);
   std::unique_ptr<juce::XmlElement> xml (state.createXml());
   copyXmlToBinary (*xml, destData);
 
-  DBG(xml->toString());
+//  DBG(xml->toString());
 }
 
 void YmmyProcessor::setStateInformation (const void* data, int sizeInBytes) {
 //  std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
     std::shared_ptr<XmlElement> xmlState{getXmlFromBinary(data, sizeInBytes)};
 
+    DBG(vts.state.toXmlString());
+
   if (xmlState.get() != nullptr) {
     if (xmlState->hasTagName(vts.state.getType())) {
-      DBG(xmlState->toString());
-      vts.replaceState(juce::ValueTree::fromXml(*xmlState));
-//      printf("vts.state before:\n");
-//      printf("%s", vts.state.toXmlString().toStdString().c_str());
+//      DBG(xmlState->toString());
+
+      ValueTree xmlTree = juce::ValueTree::fromXml(*xmlState);
+
+//      createParameterLayout();
+      auto rootTree = getInitialChildValueTree();
+      auto fluidTree = FluidSynthSynth::getInitialChildValueTree();
+
+      for (auto initTree: { rootTree, fluidTree}) {
+        for (auto i = initTree.getNumChildren(); --i >= 0;) {
+          auto child = initTree.getChild(i);  //.createCopy();
+//          if (xmlTree.hasType(child.getType())) {
+          if (xmlTree.getChildWithName(child.getType()).isValid()) {
+            continue;
+          }
+          //          initTree.removeChild(child, nullptr);
+          xmlTree.addChild(child.createCopy(), -1, nullptr);
+        }
+      }
+
+      // Force an update to selectedChannel before anything elsle
+      int chan = xmlTree.getChildWithName("settings").getProperty("selectedChannel");
+      vts.state.addChild({ "settings", { { "selectedChannel", chan }, }, {} }, -1, nullptr);
+      vts.state.getChildWithName("settings").sendPropertyChangeMessage("selectedChannel");
+      settings.selectedChannel = chan;
+
+      vts.replaceState(xmlTree);
 
 //      DBG(vts.state.toXmlString());
-//      vts.state.copyPropertiesAndChildrenFrom(juce::ValueTree::fromXml(*xmlState), nullptr);
-//      printf("vts.state after:\n");
-//      printf("%s", vts.state.toXmlString().toStdString().c_str());
       vts.state.getChildWithName("soundFont").sendPropertyChangeMessage("path");
-
-//      XmlElement* params{xmlState->getChildByName("params")};
-//      if (params) {
-//        for (auto* param : getParameters()) {
-//          if (auto* p = dynamic_cast<AudioProcessorParameterWithID*>(param)) {
-//            p->setValueNotifyingHost(static_cast<float>(params->getDoubleAttribute(p->paramID, p->getValue())));
-//          }
-//        }
-//      }
     }
   }
 }
 
-//void YmmyProcessor::getStateInformation (MemoryBlock& destData)
-//{
-//  // You should use this method to store your parameters in the memory block.
-//  // You could do that either as raw data, or use the XML or ValueTree classes
-//  // as intermediaries to make it easy to save and load complex data.
-//
-//  // Create an outer XML element..
-//  XmlElement xml{"YmmySettings"};
-//
-//  // Store the values of all our parameters, using their param ID as the XML attribute
-//  XmlElement* params{xml.createNewChildElement("params")};
-//  for (auto* param : getParameters()) {
-//    if (auto* p = dynamic_cast<AudioProcessorParameterWithID*> (param)) {
-//      params->setAttribute(p->paramID, p->getValue());
-//    }
-//  }
-//  {
-//    ValueTree tree{vts.state.getChildWithName("soundFont")};
-//    XmlElement* newElement{xml.createNewChildElement("soundFont")};
-//    {
-//      String value = tree.getProperty("path", "");
-//      newElement->setAttribute("path", value);
-//      //            String memFileVal = tree.getProperty("memfile", var(nullptr, 0));
-//      //            newElement->setAttribute("memfile", memFileVal);
-//    }
-//  }
-//
-////  DEBUG_PRINT(xml.createDocument("",false,false));
-//
-//  copyXmlToBinary(xml, destData);
-//}
-//
-//void YmmyProcessor::setStateInformation (const void* data, int sizeInBytes)
-//{
-//  // You should use this method to restore your parameters from this memory block,
-//  // whose contents will have been created by the getStateInformation() call.
-//  // This getXmlFromBinary() helper function retrieves our XML from the binary blob..
-//  std::shared_ptr<XmlElement> xmlState{getXmlFromBinary(data, sizeInBytes)};
-////  DEBUG_PRINT(xmlState->createDocument("",false,false));
-//
-//  if (xmlState.get() != nullptr) {
-//    // make sure that it's actually our type of XML object..
-//    if (xmlState->hasTagName(vts.state.getType())) {
-//      {
-//        XmlElement* xmlElement{xmlState->getChildByName("soundFont")};
-//        if (xmlElement) {
-//          ValueTree tree{vts.state.getChildWithName("soundFont")};
-//          Value value{tree.getPropertyAsValue("path", nullptr)};
-//          value = xmlElement->getStringAttribute("path", value.getValue());
-//        }
-//      }
-//      XmlElement* params{xmlState->getChildByName("params")};
-//      if (params) {
-//        for (auto* param : getParameters()) {
-//          if (auto* p = dynamic_cast<AudioProcessorParameterWithID*>(param)) {
-//            p->setValueNotifyingHost(static_cast<float>(params->getDoubleAttribute(p->paramID, p->getValue())));
-//          }
-//        }
-//      }
-//    }
-//  }
-//}
+const ValueTree YmmyProcessor::getInitialChildValueTree() {
+  return
+    { "ignoredRoot",
+      {},
+      {
+        { "settings",
+          {
+            { "selectedChannel", 0 },
+          }, {}
+        },
+      }
+    };
+}
+
+void YmmyProcessor::setVtsSettingsProperty(const juce::String& propertyName, const var& newValue) {
+  auto settingsVt = vts.state.getChildWithName(Identifier("settings"));
+  Value value{settingsVt.getPropertyAsValue(Identifier(propertyName), nullptr)};
+//  auto propName = settingsVt.getPropertyName(0);
+//  auto test = settingsVt.getProperty(Identifier(propertyName));
+//  auto test2 = settingsVt.getPropertyAsValue(Identifier(propertyName), nullptr);
+//  int test3 = test2.getValue();
+//  printf("propName(0)\n");
+//  printf("%s\n", propName.toString().toStdString().c_str());
+//  printf("TEST\n");
+//  printf("%s\n", test.toString().toStdString().c_str());
+//  printf("TEST2\n");
+//  printf("%d\n", test3);
+//  printf("value\n");
+//  printf("%s\n", value.toString().toStdString().c_str());
+  value.setValue(newValue);
+}
+
+void YmmyProcessor::setSelectedChannel(int chan) {
+  if (chan < 0 || chan >= 16) {
+    return;
+  }
+  settings.selectedChannel = chan;
+  setVtsSettingsProperty("selectedChannel", chan);
+}
+
+void YmmyProcessor::incrementChannel() {
+  setSelectedChannel(settings.selectedChannel + 1);
+}
+void YmmyProcessor::decrementChannel() {
+  setSelectedChannel(settings.selectedChannel - 1);
+}
 
 void YmmyProcessor::addSynth(std::unique_ptr<Synth> synth) {
   // Add synth to the list and update the MIDI channel map
-//  synths.push_back
   synths.push_back(std::move(synth));
 }
 
