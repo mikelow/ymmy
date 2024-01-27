@@ -5,6 +5,7 @@
 class Synth;
 
 struct YmmySettings {
+  int selectedGroup;
   int selectedChannel;
 };
 
@@ -57,6 +58,7 @@ public:
   inline Synth* getSelectedSynth() { return channelToSynthMap[settings.selectedChannel]; }
 
   int getSelectedChannel() { return settings.selectedChannel; }
+  void setSelectedGroup(int group);
   void setSelectedChannel(int chan);
   void incrementChannel();
   void decrementChannel();

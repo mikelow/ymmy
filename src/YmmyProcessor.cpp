@@ -208,7 +208,7 @@ void YmmyProcessor::getStateInformation (juce::MemoryBlock& destData) {
   std::unique_ptr<juce::XmlElement> xml (state.createXml());
   copyXmlToBinary (*xml, destData);
 
-//  DBG(xml->toString());
+  DBG(xml->toString());
 }
 
 void YmmyProcessor::setStateInformation (const void* data, int sizeInBytes) {
@@ -231,7 +231,17 @@ void YmmyProcessor::setStateInformation (const void* data, int sizeInBytes) {
         for (auto i = initTree.getNumChildren(); --i >= 0;) {
           auto child = initTree.getChild(i);  //.createCopy();
 //          if (xmlTree.hasType(child.getType())) {
-          if (xmlTree.getChildWithName(child.getType()).isValid()) {
+          auto xmlTreeChild = xmlTree.getChildWithName(child.getType());
+//          if (xmlTree.getChildWithName(child.getType()).isValid()) {
+          if (xmlTreeChild.isValid()) {
+//            int numInitChildProps = child.getNumProperties();
+//            for (auto propIx = 0; propIx < numInitChildProps; ++propIx) {
+//              auto initChildPropName = child.getPropertyName(propIx);
+//              if (xmlTreeChild.hasProperty(initChildPropName)) {
+//                auto xmlTreeChildProp = xmlTreeChild.getProperty(initChildPropName);
+//              }
+//              if
+//            }
             continue;
           }
           //          initTree.removeChild(child, nullptr);
@@ -239,15 +249,21 @@ void YmmyProcessor::setStateInformation (const void* data, int sizeInBytes) {
         }
       }
 
-      // Force an update to selectedChannel before anything elsle
+//      juce::String path = xmlTree.getChildWithName("soundFont").getProperty("path");
+//      vts.state.addChild({ "soundFont", { { "path", path }, }, {} }, -1, nullptr);
+//      vts.state.getChildWithName("soundFont").sendPropertyChangeMessage("path");
+      // Force an update to selectedChannel before anything else
+      int group = xmlTree.getChildWithName("settings").getProperty("selectedGroup");
       int chan = xmlTree.getChildWithName("settings").getProperty("selectedChannel");
-      vts.state.addChild({ "settings", { { "selectedChannel", chan }, }, {} }, -1, nullptr);
+      vts.state.addChild({ "settings", { { "selectedGroup", group }, { "selectedChannel", chan }, }, {} }, -1, nullptr);
+      vts.state.getChildWithName("settings").sendPropertyChangeMessage("selectedGroup");
       vts.state.getChildWithName("settings").sendPropertyChangeMessage("selectedChannel");
+      settings.selectedGroup = group;
       settings.selectedChannel = chan;
 
       vts.replaceState(xmlTree);
 
-//      DBG(vts.state.toXmlString());
+      DBG(vts.state.toXmlString());
       vts.state.getChildWithName("soundFont").sendPropertyChangeMessage("path");
     }
   }
@@ -260,6 +276,7 @@ const ValueTree YmmyProcessor::getInitialChildValueTree() {
       {
         { "settings",
           {
+            { "selectedGroup", 0 },
             { "selectedChannel", 0 },
           }, {}
         },
@@ -283,6 +300,14 @@ void YmmyProcessor::setVtsSettingsProperty(const juce::String& propertyName, con
 //  printf("value\n");
 //  printf("%s\n", value.toString().toStdString().c_str());
   value.setValue(newValue);
+}
+
+void YmmyProcessor::setSelectedGroup(int group) {
+  if (group < 0 || group >= 16) {
+    return;
+  }
+  settings.selectedGroup = group;
+  setVtsSettingsProperty("selectedGroup", group);
 }
 
 void YmmyProcessor::setSelectedChannel(int chan) {

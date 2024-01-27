@@ -17,6 +17,7 @@ public:
 
   void updateControls() override;
   void resized() override;
+  void populatePresetMenu(PopupMenu& menu);
 
   void parameterChanged(const String& parameterID, float newValue);
   void valueTreePropertyChanged(ValueTree& treeWhosePropertyHasChanged, const Identifier& property);
@@ -30,6 +31,7 @@ private:
 //  fluid_synth_t* synth;
 
   FilePicker fileChooser;
+  TextButton presetButton;
 
   YmmySlider attackSlider;
   YmmySlider holdSlider;

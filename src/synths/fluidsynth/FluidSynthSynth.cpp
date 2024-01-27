@@ -24,6 +24,8 @@ namespace FluidSynthParam {
   const juce::String RELEASE_RATE = "fs.releaseRate";
 
   IntParameter parameters[] = {
+      {"fs.bank", "selected bank", 0, 128, 0},
+      {"fs.preset", "selected preset", 0, 127, 0},
       {FluidSynthParam::ATTACK_RATE, "Attack Time", -12000, 8000, -12000},
       {FluidSynthParam::HOLD, "Hold Time", -12000, 5000, -12000},
       {FluidSynthParam::DECAY_RATE, "Decay Time", -12000, 8000, -12000},
@@ -112,9 +114,10 @@ FluidSynthSynth::FluidSynthSynth(AudioProcessorValueTreeState& valueTreeState)
 
   vts.state.addListener(this);
 
+  vts.addParameterListener("selectedGroup", this);
   vts.addParameterListener("selectedChannel", this);
-  vts.addParameterListener("bank", this);
-  vts.addParameterListener("preset", this);
+  vts.addParameterListener("fs.bank", this);
+  vts.addParameterListener("fs.preset", this);
   for (const auto &[param, genId]: paramToGenerator) {
     vts.addParameterListener(param, this);
   }
@@ -124,8 +127,10 @@ FluidSynthSynth::~FluidSynthSynth() {
   for (const auto &[param, genId]: paramToGenerator) {
     vts.removeParameterListener(param, this);
   }
-  vts.removeParameterListener("bank", this);
-  vts.removeParameterListener("preset", this);
+  vts.removeParameterListener("fs.bank", this);
+  vts.removeParameterListener("fs.preset", this);
+  vts.removeParameterListener("selectedGroup", this);
+  vts.removeParameterListener("selectedChannel", this);
   vts.state.removeListener(this);
 }
 
@@ -308,7 +313,7 @@ void FluidSynthSynth::processMidiMessage(MidiMessage& m) {
       break;
     case NOTE_ON:
       fluid_synth_noteon(synth.get(), m.getChannel() - 1 + channelGroupOffset, m.getNoteNumber(), m.getVelocity());
-      fluid_synth_program_change(synth.get(), m.getChannel() - 1 + channelGroupOffset, 31);
+//      fluid_synth_program_change(synth.get(), m.getChannel() - 1 + channelGroupOffset, 31);
       break;
     case KEY_PRESSURE:
       fluid_synth_channel_pressure(synth.get(), m.getChannel() - 1 + channelGroupOffset, m.getChannelPressureValue());
@@ -396,7 +401,7 @@ int FluidSynthSynth::getNumPrograms() {
 }
 
 int FluidSynthSynth::getCurrentProgram() {
-  RangedAudioParameter *param{vts.getParameter("preset")};
+  RangedAudioParameter *param{vts.getParameter("fs.preset")};
   jassert(dynamic_cast<AudioParameterInt*>(param) != nullptr);
   AudioParameterInt* castParam{dynamic_cast<AudioParameterInt*>(param)};
   return castParam->get();
@@ -412,7 +417,7 @@ const juce::String FluidSynthSynth::getProgramName (int index) {
     String presetName{"Preset "};
     return presetName << index;
   }
-  RangedAudioParameter *param{vts.getParameter("bank")};
+  RangedAudioParameter *param{vts.getParameter("fs.bank")};
   jassert(dynamic_cast<AudioParameterInt*>(param) != nullptr);
   AudioParameterInt* castParam{dynamic_cast<AudioParameterInt*>(param)};
   int bank{castParam->get()};
@@ -429,7 +434,7 @@ const juce::String FluidSynthSynth::getProgramName (int index) {
 }
 
 void FluidSynthSynth::setCurrentProgram (int index) {
-  RangedAudioParameter *param{vts.getParameter("preset")};
+  RangedAudioParameter *param{vts.getParameter("fs.preset")};
   jassert(dynamic_cast<AudioParameterInt*>(param) != nullptr);
   AudioParameterInt* castParam{dynamic_cast<AudioParameterInt*>(param)};
   // setCurrentProgram() gets invoked from non-message thread.
@@ -440,19 +445,19 @@ void FluidSynthSynth::setCurrentProgram (int index) {
   *castParam = index;
 }
 
-const StringArray FluidSynthSynth::programChangeParams{"bank", "preset"};
+const StringArray FluidSynthSynth::programChangeParams{"fs.bank", "fs.preset"};
 void FluidSynthSynth::parameterChanged(const String& parameterID, float newValue) {
-  DBG("FluidSynthSynth::parameterChanged()");
+  DBG("FluidSynthSynth::parameterChanged() " + parameterID);
   if (programChangeParams.contains(parameterID)) {
     int bank, preset;
     {
-      RangedAudioParameter *param{vts.getParameter("bank")};
+      RangedAudioParameter *param{vts.getParameter("fs.bank")};
       jassert(dynamic_cast<AudioParameterInt*>(param) != nullptr);
       AudioParameterInt* castParam{dynamic_cast<AudioParameterInt*>(param)};
       bank = castParam->get();
     }
     {
-      RangedAudioParameter *param{vts.getParameter("preset")};
+      RangedAudioParameter *param{vts.getParameter("fs.preset")};
       jassert(dynamic_cast<AudioParameterInt*>(param) != nullptr);
       AudioParameterInt* castParam{dynamic_cast<AudioParameterInt*>(param)};
       preset = castParam->get();
@@ -460,10 +465,13 @@ void FluidSynthSynth::parameterChanged(const String& parameterID, float newValue
     int bankOffset{fluid_synth_get_bank_offset(synth.get(), sfont_id)};
     fluid_synth_program_select(
       synth.get(),
-      selectedChannel,
+      selectedChannel + (selectedGroup*16),
       sfont_id,
       static_cast<unsigned int>(bankOffset + bank),
       static_cast<unsigned int>(preset));
+
+    // We should probably reset the nrpn overrides when a new program is selected
+//    updateParamsFromSynth();
   } else if (
       // https://stackoverflow.com/a/55482091/5257399
       auto it{paramToGenerator.find(parameterID)};
@@ -477,7 +485,7 @@ void FluidSynthSynth::parameterChanged(const String& parameterID, float newValue
     int generatorNumber{static_cast<int>(it->second)};
 
     printf("PARAMETER CHANGED: %d\n", generatorNumber);
-    fluid_synth_set_gen_override(synth.get(), selectedChannel, generatorNumber, static_cast<float>(value));
+    fluid_synth_set_gen_override(synth.get(), selectedChannel + (selectedGroup*16), generatorNumber, static_cast<float>(value));
 //    fluid_voice_gen_set(synth.get(), controllerNumber, static_cast<float>(value));
 
 //    fluid_synth_cc(synth.get(), selectedChannel, NRPN_MSB, 120);
@@ -508,41 +516,48 @@ void FluidSynthSynth::valueTreePropertyChanged(ValueTree& treeWhosePropertyHasCh
       }
     }
   } else if (treeWhosePropertyHasChanged.getType() == StringRef("settings")) {
-    if (property == StringRef("selectedChannel")) {
+    if (property == StringRef("selectedChannel") || property == StringRef("selectedGroup")) {
+      selectedGroup = treeWhosePropertyHasChanged.getProperty("selectedGroup", 0);
       selectedChannel = treeWhosePropertyHasChanged.getProperty("selectedChannel", 0);
 
-      for (const auto &[param, genId]: paramToGenerator) {
-//        vts.addParameterListener(param, this);
-        auto p = vts.getParameter(param);
-        if (!p) {
-          continue;
-        }
-        auto paramVal = fluid_synth_get_gen(synth.get(), selectedChannel, genId);
-        printf("genID: %d: %f\n", genId, paramVal);
-        auto range = p->getNormalisableRange();
-        p->setValueNotifyingHost(range.convertTo0to1(paramVal));
-
-//        auto typeName = path.getType();
-//        auto propName = path.getPropertyName(0);
-//        Value value{vts.state.getChildWithName(typeName).getPropertyAsValue(propName, nullptr)};
-//        value.setValue(newValue);
-
-      }
-
+      updateParamsFromSynth();
+//      for (const auto &[param, genId]: paramToGenerator) {
+//        auto p = vts.getParameter(param);
+//        if (!p) {
+//          continue;
+//        }
+//        auto paramVal = fluid_synth_get_gen(synth.get(), selectedChannel + (selectedGroup*16), genId);
+//        printf("genID: %d: %f\n", genId, paramVal);
+//        auto range = p->getNormalisableRange();
+//        p->setValueNotifyingHost(range.convertTo0to1(paramVal));
+//      }
     }
   }
 }
 
+void FluidSynthSynth::updateParamsFromSynth() {
+  for (const auto &[param, genId]: paramToGenerator) {
+    auto p = vts.getParameter(param);
+    if (!p) {
+      continue;
+    }
+    auto paramVal = fluid_synth_get_gen(synth.get(), selectedChannel + (selectedGroup*16), genId);
+    printf("genID: %d: %f\n", genId, paramVal);
+    auto range = p->getNormalisableRange();
+    p->setValueNotifyingHost(range.convertTo0to1(paramVal));
+  }
+}
+
 void FluidSynthSynth::setControllerValue(int controller, int value) {
-    fluid_synth_cc(synth.get(), selectedChannel, controller, value);
+    fluid_synth_cc(synth.get(), selectedChannel + (selectedGroup*16), controller, value);
 }
 
 void FluidSynthSynth::valueTreeRedirected (ValueTree& treeWhichHasBeenChanged) {
 //  vts.state.removeListener(this);
 //  vts.state.addListener(this);
 
-  vts.addParameterListener("bank", this);
-  vts.addParameterListener("preset", this);
+  vts.addParameterListener("fs.bank", this);
+  vts.addParameterListener("fs.preset", this);
   for (const auto &[param, genId]: paramToGenerator) {
     vts.addParameterListener(param, this);
   }
@@ -600,38 +615,37 @@ void FluidSynthSynth::reset() {
 
 
 void FluidSynthSynth::refreshBanks() {
-  ValueTree banks{"banks"};
-  fluid_sfont_t* sfont{
-      sfont_id == -1
-          ? nullptr
-          : fluid_synth_get_sfont_by_id(synth.get(), sfont_id)
-  };
-  if (sfont) {
-    int greatestEncounteredBank{-1};
-    ValueTree bank;
+  ValueTree banks = ValueTree("banks");
+  if (sfont_id == -1) {
+    return;
+  }
+  fluid_sfont_t* sfont = fluid_synth_get_sfont_by_id(synth.get(), sfont_id);
+  if (!sfont) {
+    return;
+  }
 
-    fluid_sfont_iteration_start(sfont);
-    for(fluid_preset_t* preset {fluid_sfont_iteration_next(sfont)};
-         preset != nullptr;
-         preset = fluid_sfont_iteration_next(sfont)) {
-      int bankNum{fluid_preset_get_banknum(preset)};
-      if (bankNum > greatestEncounteredBank) {
-        if (greatestEncounteredBank > -1) {
-          banks.appendChild(bank, nullptr);
-        }
-        bank = { "bank", {
-                            { "num", bankNum }
-                        } };
-        greatestEncounteredBank = bankNum;
+  int greatestEncounteredBank = -1;
+  ValueTree bank;
+
+  fluid_sfont_iteration_start(sfont);
+  for(fluid_preset_t* preset = fluid_sfont_iteration_next(sfont);
+       preset != nullptr;
+       preset = fluid_sfont_iteration_next(sfont)) {
+    int bankNum = fluid_preset_get_banknum(preset);
+    if (bankNum > greatestEncounteredBank) {
+      if (greatestEncounteredBank > -1) {
+        banks.appendChild(bank, nullptr);
       }
-      bank.appendChild({ "preset", {
-                                      { "num", fluid_preset_get_num(preset) },
-                                      { "name", String{fluid_preset_get_name(preset)} }
-                                  }, {} }, nullptr);
+      bank = { "fs.bank", { { "num", bankNum } } };
+      greatestEncounteredBank = bankNum;
     }
-    if (greatestEncounteredBank > -1) {
-      banks.appendChild(bank, nullptr);
-    }
+    bank.appendChild({ "fs.preset", {
+                                    { "num", fluid_preset_get_num(preset) },
+                                    { "name", String(fluid_preset_get_name(preset)) }
+                                }, {} }, nullptr);
+  }
+  if (greatestEncounteredBank > -1) {
+    banks.appendChild(bank, nullptr);
   }
   vts.state.getChildWithName("banks").copyPropertiesAndChildrenFrom(banks, nullptr);
   vts.state.getChildWithName("banks").sendPropertyChangeMessage("synthetic");

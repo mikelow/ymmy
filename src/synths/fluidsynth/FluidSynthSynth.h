@@ -38,6 +38,8 @@ public:
   void setCurrentProgram (int index) override;
   void setControllerValue(int controller, int value);
 
+  void updateParamsFromSynth();
+
   //==============================================================================
   virtual void parameterChanged (const String& parameterID, float newValue) override;
 
@@ -66,6 +68,7 @@ private:
   static const StringArray programChangeParams;
 
   int sfont_id;
+  int selectedGroup;
   int selectedChannel;
   int channelGroup;
   double currentSampleRate;

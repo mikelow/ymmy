@@ -6,8 +6,9 @@
 YmmyEditor::YmmyEditor(YmmyProcessor& p, juce::AudioProcessorValueTreeState& vts)
     : AudioProcessorEditor(&p), audioProcessor(p), valueTreeState(vts),
       midiKeyboard(p.keyboardState, MidiKeyboardComponent::horizontalKeyboard),
-      channelLabel(),
-      incChannelButton(String("+")), decChannelButton(String("-"))
+//      channelLabel(),
+      laf(new LookAndFeel_V4(LookAndFeel_V4::getDarkColourScheme()))
+//      incChannelButton(String("+")), decChannelButton(String("-"))
 {
   // This is where our plugin’s editor size is set.
   setSize(960, 540);
@@ -26,37 +27,53 @@ YmmyEditor::YmmyEditor(YmmyProcessor& p, juce::AudioProcessorValueTreeState& vts
   //    // add the listener to the component
   //    midiVolume.addListener (this);
 
+  setLookAndFeel(laf);
+
   midiKeyboard.setName ("MIDI Keyboard");
   midiKeyboard.setWantsKeyboardFocus(false);
   midiKeyboard.setMidiChannel(audioProcessor.getSelectedChannel()+1);
   setWantsKeyboardFocus(true);
   addAndMakeVisible(midiKeyboard);
 
-  channelLabel.setText(String(audioProcessor.getSelectedChannel()+1), dontSendNotification);
-  channelLabel.setEditable(true);
-  channelLabel.setColour(Label::backgroundColourId, Colours::darkblue);
-  channelLabel.setJustificationType(Justification::centred);
-  channelLabel.onTextChange = [this] {
-    auto text = channelLabel.getText();
-    if (!text.containsOnly("0123456789")) {
-      channelLabel.setText(String(this->audioProcessor.getSelectedChannel()+1), dontSendNotification);
-      return;
-    }
-    int newChannel = channelLabel.getText().getIntValue();
-    if (newChannel < 1 || newChannel > 16) {
-      channelLabel.setText(String(this->audioProcessor.getSelectedChannel()+1), dontSendNotification);
-      return;
-    }
-
-    midiKeyboard.setMidiChannel(newChannel);
-    this->audioProcessor.setSelectedChannel(newChannel-1);
-  };
+  groupLabel.setText("Group", dontSendNotification);
+  channelLabel.setText("Channel", dontSendNotification);
+  addAndMakeVisible(groupLabel);
   addAndMakeVisible(channelLabel);
+  groupSlider.setRange(1, 16, 1.0);
+  groupSlider.setIncDecButtonsMode (Slider::incDecButtonsDraggable_Horizontal);
+  groupSlider.addListener(this);
+  addAndMakeVisible(groupSlider);
 
-  addAndMakeVisible(incChannelButton);
-  addAndMakeVisible(decChannelButton);
-  incChannelButton.addListener(this);
-  decChannelButton.addListener(this);
+  channelSlider.setRange(1, 16, 1.0);
+  channelSlider.setIncDecButtonsMode (Slider::incDecButtonsDraggable_Horizontal);
+  channelSlider.addListener(this);
+  addAndMakeVisible(channelSlider);
+
+//  channelLabel.setText(String(audioProcessor.getSelectedChannel()+1), dontSendNotification);
+//  channelLabel.setEditable(true);
+//  channelLabel.setColour(Label::backgroundColourId, Colours::darkblue);
+//  channelLabel.setJustificationType(Justification::centred);
+//  channelLabel.onTextChange = [this] {
+//    auto text = channelLabel.getText();
+//    if (!text.containsOnly("0123456789")) {
+//      channelLabel.setText(String(this->audioProcessor.getSelectedChannel()+1), dontSendNotification);
+//      return;
+//    }
+//    int newChannel = channelLabel.getText().getIntValue();
+//    if (newChannel < 1 || newChannel > 16) {
+//      channelLabel.setText(String(this->audioProcessor.getSelectedChannel()+1), dontSendNotification);
+//      return;
+//    }
+//
+//    midiKeyboard.setMidiChannel(newChannel);
+//    this->audioProcessor.setSelectedChannel(newChannel-1);
+//  };
+//  addAndMakeVisible(channelLabel);
+//
+//  addAndMakeVisible(incChannelButton);
+//  addAndMakeVisible(decChannelButton);
+//  incChannelButton.addListener(this);
+//  decChannelButton.addListener(this);
 
   setCurrentSynth(FluidSynth);
 
@@ -64,6 +81,8 @@ YmmyEditor::YmmyEditor(YmmyProcessor& p, juce::AudioProcessorValueTreeState& vts
 }
 
 YmmyEditor::~YmmyEditor() {
+  setLookAndFeel(nullptr);
+  delete laf;
 }
 
 void YmmyEditor::setCurrentSynth(SynthType synthType) {
@@ -87,19 +106,28 @@ void YmmyEditor::setCurrentSynth(SynthType synthType) {
 }
 
 void YmmyEditor::sliderValueChanged(juce::Slider* slider) {
-  audioProcessor.noteOnVel = midiVolume.getValue();
+//  audioProcessor.noteOnVel = midiVolume.getValue();
+  if (slider == &channelSlider) {
+    int newChannel = static_cast<int>(slider->getValue());
+    audioProcessor.setSelectedChannel(newChannel-1);
+    midiKeyboard.setMidiChannel(newChannel);
+  } else if (slider == &groupSlider) {
+    int newGroup = static_cast<int>(slider->getValue());
+    printf("channelGroup set: %d\n", newGroup);
+    audioProcessor.setSelectedGroup(newGroup-1);
+  }
 }
 
 void YmmyEditor::buttonClicked(Button* button) {
-  if (button == &incChannelButton) {
-    audioProcessor.incrementChannel();
-    printf("GET SELECTED CHANNEL %d\n", audioProcessor.getSelectedChannel());
-    midiKeyboard.setMidiChannel(audioProcessor.getSelectedChannel()+1);
-  } else if (button == &decChannelButton) {
-    audioProcessor.decrementChannel();
-    printf("GET SELECTED CHANNEL %d\n", audioProcessor.getSelectedChannel());
-    midiKeyboard.setMidiChannel(audioProcessor.getSelectedChannel()+1);
-  }
+//  if (button == &incChannelButton) {
+//    audioProcessor.incrementChannel();
+//    printf("GET SELECTED CHANNEL %d\n", audioProcessor.getSelectedChannel());
+//    midiKeyboard.setMidiChannel(audioProcessor.getSelectedChannel()+1);
+//  } else if (button == &decChannelButton) {
+//    audioProcessor.decrementChannel();
+//    printf("GET SELECTED CHANNEL %d\n", audioProcessor.getSelectedChannel());
+//    midiKeyboard.setMidiChannel(audioProcessor.getSelectedChannel()+1);
+//  }
 }
 
 
@@ -109,9 +137,14 @@ void YmmyEditor::resized() {
 
   auto area = getLocalBounds();
 
-  channelLabel.setBounds( 10, 10, 40, 40);
-  incChannelButton.setBounds( 50, 10, 40, 40);
-  decChannelButton.setBounds( 90, 10, 40, 40);
+  groupLabel.setBounds(10, 5, 60, 20);
+  groupSlider.setBounds(60, 5, 70, 40);
+  channelLabel.setBounds(140, 5, 60, 20);
+  channelSlider.setBounds(200, 5, 70, 40);
+
+//  channelLabel.setBounds( 10, 10, 40, 40);
+//  incChannelButton.setBounds( 50, 10, 40, 40);
+//  decChannelButton.setBounds( 90, 10, 40, 40);
 
 
   auto synth = currentSynth.get();
@@ -125,7 +158,8 @@ void YmmyEditor::resized() {
 
 void YmmyEditor::paint(juce::Graphics& g) {
   // fill the whole window white
-  g.fillAll(juce::Colours::white);
+  auto windowColor = laf->findColour (ResizableWindow::backgroundColourId);
+  g.fillAll(windowColor);
 
   // set the current drawing colour to black
   g.setColour(juce::Colours::black);
@@ -133,15 +167,21 @@ void YmmyEditor::paint(juce::Graphics& g) {
   // set the font size and draw text to the screen
   g.setFont(15.0f);
 
-  g.drawFittedText("Midi Volume", 0, 0, getWidth(), 30, juce::Justification::centred, 1);
+//  g.drawFittedText("Midi Volume", 0, 0, getWidth(), 30, juce::Justification::centred, 1);
 }
 
 void YmmyEditor::valueTreePropertyChanged(ValueTree& treeWhosePropertyHasChanged,
                                                const Identifier& property) {
   if (treeWhosePropertyHasChanged.getType() == StringRef("settings")) {
-    if (property == StringRef("selectedChannel")) {
-      int newChannel = treeWhosePropertyHasChanged.getProperty("selectedChannel", 1);
-      channelLabel.setText(String(newChannel + 1), dontSendNotification);
+    if (property == StringRef("selectedGroup")) {
+      int newGroup = treeWhosePropertyHasChanged.getProperty("selectedGroup", 0);
+      groupSlider.setValue(newGroup+1, dontSendNotification);
+      //      channelLabel.setText(String(newChannel + 1), dontSendNotification);
+    }
+    else if (property == StringRef("selectedChannel")) {
+      int newChannel = treeWhosePropertyHasChanged.getProperty("selectedChannel", 0);
+      channelSlider.setValue(newChannel+1, dontSendNotification);
+//      channelLabel.setText(String(newChannel + 1), dontSendNotification);
     }
   }
 }

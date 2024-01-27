@@ -37,12 +37,18 @@ private:
 
   std::unique_ptr<SynthComponent> currentSynth;
 
+  LookAndFeel* laf;
+
   Slider midiVolume;  // [1]
   MidiKeyboardComponent midiKeyboard;
 
+  Label groupLabel;
   Label channelLabel;
-  TextButton incChannelButton;
-  TextButton decChannelButton;
+  Slider groupSlider    { Slider::IncDecButtons, Slider::TextBoxAbove };
+  Slider channelSlider    { Slider::IncDecButtons, Slider::TextBoxAbove };
+//  Label channelLabel;
+//  TextButton incChannelButton;
+//  TextButton decChannelButton;
 
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(YmmyEditor)
