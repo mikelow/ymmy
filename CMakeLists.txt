@@ -58,6 +58,7 @@ target_sources(${PROJECT_NAME}
     "${SRC_DIR}/synths/SynthComponent.cpp"
     "${SRC_DIR}/synths/fluidsynth/FluidSynthComponent.cpp"
     "${SRC_DIR}/synths/fluidsynth/FluidSynthSynth.cpp"
+    "${SRC_DIR}/synths/ymfm/YM2151Synth.cpp"
 )
 
 # Create ymmy_network library to provide plugin network interface
