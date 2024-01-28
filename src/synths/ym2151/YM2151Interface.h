@@ -52,6 +52,14 @@ public:
     }
   }
 
+  void expire_engine_timer() {
+    for (int i = 0; i < 2; ++i) {
+      m_engine->engine_timer_expired(i);
+      m_timers[i] = 0;
+    }
+    m_busy_timer = 0;
+  }
+
   void write(uint8_t addr, uint8_t value) {
     if (!ymfm_is_busy()) {
       m_chip.write_address(addr);

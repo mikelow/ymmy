@@ -1,5 +1,7 @@
 #include "YM2151Synth.h"
 #include "../../MidiConstants.h"
+#include <random>
+
 
 YM2151Synth::YM2151Synth(AudioProcessorValueTreeState& valueTreeState)
     : Synth(valueTreeState),
@@ -55,10 +57,118 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 
   switch (eventNibble) {
     case NOTE_OFF:
+      for (int i = 0; i < 8; ++i) {
+        interface.write(8, i);
+        interface.expire_engine_timer();
+      }
       break;
-    case NOTE_ON:
-      interface.write(8, 0x79);
+    case NOTE_ON: {
+      std::mt19937 engine{std::random_device{}()};
+      std::uniform_int_distribution<uint8_t> dist(0, 127);
+
+      interface.write(0x0F, 0x00);
+      interface.expire_engine_timer();
+
+      for (int i = 0; i < 8; ++i) {
+        uint8_t randomByte = dist(engine);
+        interface.write(0x20 + i, randomByte | 0xC0);
+//        interface.write(0x20 + i, 0xFC);
+        interface.expire_engine_timer();
+      }
+
+      for (int i = 0; i < 8; ++i) {
+        int absNote = m.getNoteNumber();
+        int octave = absNote / 12;
+        int note = absNote % 12;
+        uint8_t val = ((octave & 7) << 4) | note;
+        printf("OCT: %d    NOTE: %d  val: %X \n", octave, note, val);
+//        uint8_t randomByte = dist(engine);
+        //        interface.write(0x28 + i, 0x31 + i);
+        interface.write(0x28 + i, val);
+        interface.expire_engine_timer();
+      }
+
+      for (int i = 0; i < 8; ++i) {
+        //        uint8_t randomByte = dist(engine);
+        interface.write(0x30 + i, 0);
+        interface.expire_engine_timer();
+      }
+
+      for (int i = 0; i < 8 * 4; ++i) {
+//        uint8_t randomByte = dist(engine);
+        interface.write(0x40 + i, 0);
+        interface.expire_engine_timer();
+
+//        interface.write(0x40 + i, randomByte);
+//        interface.expire_engine_timer();
+      }
+
+      for (int i = 0; i < 8 * 4; ++i) {
+        uint8_t randomByte = dist(engine);
+//        interface.write(0x60 + i, 0x7F);
+//        interface.write(0x60 + i, randomByte);
+        interface.write(0x60 + i, 0x10);
+        interface.expire_engine_timer();
+
+//        printf("READSTATUS %X\n", interface.read_status());
+//        interface.expire_engine_timer();
+//        interface.write(0x10, 0xC8);
+//        interface.expire_engine_timer();
+//        interface.write(0x11, 0x00);
+//        interface.expire_engine_timer();
+//        interface.write(0x14, 0x15);
+//        interface.expire_engine_timer();
+//        printf("READSTATUS %X\n", interface.read_status());
+
+//        interface.irq();
+        //        interface.update_clocks()
+      }
+      for (int i = 0; i < 8 * 4; ++i) {
+        uint8_t randomByte = dist(engine);
+//        interface.write(0x80 + i, 0x00);
+//        interface.write(0x80 + i, randomByte);
+//        interface.write(0x80 + i, 0xDF);
+        interface.write(0x80 + i, 0x1F);
+        interface.expire_engine_timer();
+      }
+      for (int i = 0; i < 8 * 4; ++i) {
+        uint8_t randomByte = dist(engine);
+//        interface.write(0xA0 + i, randomByte);
+        interface.write(0xA0 + i, 0xDF);
+        interface.expire_engine_timer();
+      }
+      for (int i = 0; i < 8 * 4; ++i) {
+        uint8_t randomByte = dist(engine);
+//        interface.write(0xC0 + i, randomByte);
+        interface.write(0xC0 + i, 0x0);
+        interface.expire_engine_timer();
+      }
+      for (int i = 0; i < 8 * 4; ++i) {
+        uint8_t randomByte = dist(engine);
+//        interface.write(0xE0 + i, 0xFF);
+//        interface.write(0xE0 + i, randomByte);
+        interface.write(0xE0 + i, 0x3F);
+        interface.expire_engine_timer();
+      }
+
+//      interface.write(0x10, 0xC8);
+//      interface.expire_engine_timer();
+//      interface.write(0x11, 0x00);
+//      interface.expire_engine_timer();
+//      interface.write(0x14, 0x15);
+//      interface.expire_engine_timer();
+
+      for (int i = 0; i < 8; ++i) {
+        interface.write(8, 0x78 + i);
+        interface.expire_engine_timer();
+        //      interface.write(0x10, 0xC8);
+        //      interface.expire_engine_timer();
+        //      interface.write(0x11, 0x00);
+        //      interface.expire_engine_timer();
+        //      interface.write(0x14, 0x15);
+      }
       break;
+    }
     case KEY_PRESSURE:
       break;
     case CONTROL_CHANGE:
@@ -92,8 +202,20 @@ void YM2151Synth::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
   }
   float* writeBuffers[2] = {bufferWritePointers[0], bufferWritePointers[1] };
 
+//  interface.write(0x10, 0xC8);
+//  interface.expire_engine_timer();
+//  interface.write(0x11, 0x00);
+//  interface.expire_engine_timer();
+//  interface.write(0x14, 0x15);
+//  interface.expire_engine_timer();
   interface.generate(writeBuffers, buffer.getNumSamples());
-//  fluid_synth_process(synth.get(), buffer.getNumSamples(), 2, writeBuffers, 2, writeBuffers);
+//  std::mt19937 engine{std::random_device{}()};
+//  std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+//  for (int i=0; i<2; i++) {
+//    for (int j=0; j<buffer.getNumSamples(); j++) {
+//      writeBuffers[i][j] = dist(engine);
+//    }
+//  }
 }
 
 void YM2151Synth::prepareToPlay(double sampleRate, int samplesPerBlock) {
