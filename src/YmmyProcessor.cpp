@@ -2,6 +2,7 @@
 #include "YmmyEditor.h"
 #include "synths/Synth.h"
 #include "synths/fluidsynth/FluidSynthSynth.h"
+#include "synths/ym2151/YM2151Synth.h"
 #include "MidiConstants.h"
 
 YmmyProcessor::YmmyProcessor()
@@ -9,7 +10,8 @@ YmmyProcessor::YmmyProcessor()
           vts{*this, nullptr, juce::Identifier ("YmmySettings"), createParameterLayout()},
           channelGroup(0), settings{0} {
 
-  addSynth(std::make_unique<FluidSynthSynth>(vts));
+//  addSynth(std::make_unique<FluidSynthSynth>(vts));
+  addSynth(std::make_unique<YM2151Synth>(vts));
 
 //  addSettingsToVTS();
 //  FluidSynthSynth::getInitialChildValueTree();

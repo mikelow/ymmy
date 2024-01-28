@@ -7,6 +7,7 @@ set(JUCE_DIR "./lib/JUCE")
 set(JUCE_MODULES_DIR "${JUCE_DIR}/modules")
 set(FLUIDSYNTH_DIR "./lib/fluidsynth")
 set(FLUIDSYNTH_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/fluidsynth")
+set(YMFM_DIR "./lib/ymfm")
 set(SRC_DIR "./src")
 set(FORMATS "Standalone" "VST3")
 
@@ -40,6 +41,7 @@ juce_generate_juce_header(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
     "${FLUIDSYNTH_BUILD_DIR}/include"
     "${FLUIDSYNTH_DIR}/include"
+    "${YMFM_DIR}/src"
 )
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC
@@ -58,7 +60,8 @@ target_sources(${PROJECT_NAME}
     "${SRC_DIR}/synths/SynthComponent.cpp"
     "${SRC_DIR}/synths/fluidsynth/FluidSynthComponent.cpp"
     "${SRC_DIR}/synths/fluidsynth/FluidSynthSynth.cpp"
-    "${SRC_DIR}/synths/ymfm/YM2151Synth.cpp"
+    "${SRC_DIR}/synths/ym2151/YM2151Synth.cpp"
+    "./lib/ymfm/src/ymfm_opm.cpp"
 )
 
 # Create ymmy_network library to provide plugin network interface

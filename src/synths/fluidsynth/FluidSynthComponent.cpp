@@ -73,7 +73,7 @@ void FluidSynthComponent::resized() {
   }
 }
 
-void FluidSynthComponent::populatePresetMenu(PopupMenu& menu) {;3
+void FluidSynthComponent::populatePresetMenu(PopupMenu& menu) {
   auto banks = vts.state.getChildWithName("banks");
   int numBanks = banks.getNumChildren();
   auto selectedBankParam = vts.getParameter("fs.bank");

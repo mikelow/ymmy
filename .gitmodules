@@ -5,3 +5,6 @@
 	path = lib/fluidsynth
 	url = https://github.com/mikelow/fluidsynth.git
 	branch = sansglib
+[submodule "lib/ymfm"]
+	path = lib/ymfm
+	url = https://github.com/aaronsgiles/ymfm.git
