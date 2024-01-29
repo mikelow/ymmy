@@ -3,6 +3,7 @@
 #include "../Synth.h"
 #include "ymfm_opm.h"
 #include "YM2151Interface.h"
+#include "OPMFileLoader.h"
 
 class YM2151Synth: public Synth,
                     public ValueTree::Listener,
@@ -50,6 +51,7 @@ private:
   int selectedChannel;
   int channelGroup;
 
+  OPMFileLoader opmLoader;
   // YMFM
   YM2151Interface interface;
 

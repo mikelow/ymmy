@@ -2,6 +2,7 @@
 #include "YmmyProcessor.h"
 #include "synths/SynthComponent.h"
 #include "synths/fluidsynth/FluidSynthComponent.h"
+#include "synths/ym2151/YM2151Component.h"
 
 YmmyEditor::YmmyEditor(YmmyProcessor& p, juce::AudioProcessorValueTreeState& vts)
     : AudioProcessorEditor(&p), audioProcessor(p), valueTreeState(vts),
@@ -75,7 +76,7 @@ YmmyEditor::YmmyEditor(YmmyProcessor& p, juce::AudioProcessorValueTreeState& vts
 //  incChannelButton.addListener(this);
 //  decChannelButton.addListener(this);
 
-  setCurrentSynth(FluidSynth);
+  setCurrentSynth(YM2151);
 
   vts.state.addListener(this);
 }
@@ -97,6 +98,7 @@ void YmmyEditor::setCurrentSynth(SynthType synthType) {
       currentSynth = std::make_unique<FluidSynthComponent>(valueTreeState);
       break;
     case SynthType::YM2151:
+      currentSynth = std::make_unique<YM2151Component>(valueTreeState);
       break;
   }
 

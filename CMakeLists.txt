@@ -60,7 +60,9 @@ target_sources(${PROJECT_NAME}
     "${SRC_DIR}/synths/SynthComponent.cpp"
     "${SRC_DIR}/synths/fluidsynth/FluidSynthComponent.cpp"
     "${SRC_DIR}/synths/fluidsynth/FluidSynthSynth.cpp"
+    "${SRC_DIR}/synths/ym2151/YM2151Component.cpp"
     "${SRC_DIR}/synths/ym2151/YM2151Synth.cpp"
+    "${SRC_DIR}/synths/ym2151/OPMFileLoader.cpp"
     "./lib/ymfm/src/ymfm_opm.cpp"
 )
 

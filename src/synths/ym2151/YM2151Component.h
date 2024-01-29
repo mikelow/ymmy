@@ -1,17 +1,17 @@
 #pragma once
 
-#include "FluidSynthSynth.h"
+#include "YM2151Synth.h"
 #include "../SynthComponent.h"
 #include "../../components/FilePicker.h"
 #include "../../components/YmmySlider.h"
 
-class FluidSynthComponent : public SynthComponent,
-                            public AudioProcessorValueTreeState::Listener {
+class YM2151Component : public SynthComponent,
+                        public AudioProcessorValueTreeState::Listener {
 public:
   typedef juce::AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
 
-  FluidSynthComponent(juce::AudioProcessorValueTreeState& valueTreeState);
-  ~FluidSynthComponent();
+  YM2151Component(juce::AudioProcessorValueTreeState& valueTreeState);
+  ~YM2151Component();
 
   void updateControls() override;
   void resized() override;
@@ -25,14 +25,4 @@ private:
 
   FilePicker fileChooser;
   TextButton presetButton;
-
-  YmmySlider attackSlider;
-  YmmySlider holdSlider;
-  YmmySlider decaySlider;
-  YmmySlider sustainSlider;
-  YmmySlider releaseSlider;
-
-  YmmySlider* sliders[5];
-  IntParameter sliderParams[5];
-  std::map<juce::String, Component*> paramToComponent;
 };
