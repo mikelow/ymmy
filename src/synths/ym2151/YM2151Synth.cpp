@@ -59,7 +59,6 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
     case NOTE_OFF:
       for (int i = 0; i < 8; ++i) {
         interface.write(8, i);
-        interface.expire_engine_timer();
       }
       break;
     case NOTE_ON: {
@@ -67,37 +66,35 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       std::uniform_int_distribution<uint8_t> dist(0, 127);
 
       interface.write(0x0F, 0x00);
-      interface.expire_engine_timer();
 
       for (int i = 0; i < 8; ++i) {
         uint8_t randomByte = dist(engine);
         interface.write(0x20 + i, randomByte | 0xC0);
 //        interface.write(0x20 + i, 0xFC);
-        interface.expire_engine_timer();
       }
 
       for (int i = 0; i < 8; ++i) {
         int absNote = m.getNoteNumber();
         int octave = absNote / 12;
         int note = absNote % 12;
-        uint8_t val = ((octave & 7) << 4) | note;
+
+        const int noteTable[12] = {0,1,2,4,5,6,8,9,10,12,13,14};
+
+        uint8_t val = ((octave & 7) << 4) | noteTable[note];
         printf("OCT: %d    NOTE: %d  val: %X \n", octave, note, val);
 //        uint8_t randomByte = dist(engine);
         //        interface.write(0x28 + i, 0x31 + i);
         interface.write(0x28 + i, val);
-        interface.expire_engine_timer();
       }
 
       for (int i = 0; i < 8; ++i) {
         //        uint8_t randomByte = dist(engine);
         interface.write(0x30 + i, 0);
-        interface.expire_engine_timer();
       }
 
       for (int i = 0; i < 8 * 4; ++i) {
 //        uint8_t randomByte = dist(engine);
         interface.write(0x40 + i, 0);
-        interface.expire_engine_timer();
 
 //        interface.write(0x40 + i, randomByte);
 //        interface.expire_engine_timer();
@@ -108,7 +105,6 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 //        interface.write(0x60 + i, 0x7F);
 //        interface.write(0x60 + i, randomByte);
         interface.write(0x60 + i, 0x10);
-        interface.expire_engine_timer();
 
 //        printf("READSTATUS %X\n", interface.read_status());
 //        interface.expire_engine_timer();
@@ -129,26 +125,22 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 //        interface.write(0x80 + i, randomByte);
 //        interface.write(0x80 + i, 0xDF);
         interface.write(0x80 + i, 0x1F);
-        interface.expire_engine_timer();
       }
       for (int i = 0; i < 8 * 4; ++i) {
         uint8_t randomByte = dist(engine);
 //        interface.write(0xA0 + i, randomByte);
         interface.write(0xA0 + i, 0xDF);
-        interface.expire_engine_timer();
       }
       for (int i = 0; i < 8 * 4; ++i) {
         uint8_t randomByte = dist(engine);
 //        interface.write(0xC0 + i, randomByte);
         interface.write(0xC0 + i, 0x0);
-        interface.expire_engine_timer();
       }
       for (int i = 0; i < 8 * 4; ++i) {
         uint8_t randomByte = dist(engine);
 //        interface.write(0xE0 + i, 0xFF);
 //        interface.write(0xE0 + i, randomByte);
         interface.write(0xE0 + i, 0x3F);
-        interface.expire_engine_timer();
       }
 
 //      interface.write(0x10, 0xC8);
@@ -160,7 +152,6 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 
       for (int i = 0; i < 8; ++i) {
         interface.write(8, 0x78 + i);
-        interface.expire_engine_timer();
         //      interface.write(0x10, 0xC8);
         //      interface.expire_engine_timer();
         //      interface.write(0x11, 0x00);

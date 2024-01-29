@@ -61,12 +61,12 @@ public:
   }
 
   void write(uint8_t addr, uint8_t value) {
-    if (!ymfm_is_busy()) {
-      m_chip.write_address(addr);
-      m_chip.write_data(value);
-    } else {
-      printf("YM2151 write received while busy.\n");
+    if (ymfm_is_busy()) {
+      expire_engine_timer();
     }
+    m_chip.write_address(addr);
+    m_chip.write_data(value);
+    expire_engine_timer();
   }
 
 //  void generate(int16_t* output, uint32_t numsamples) {
