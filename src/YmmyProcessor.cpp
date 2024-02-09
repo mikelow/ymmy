@@ -10,8 +10,8 @@ YmmyProcessor::YmmyProcessor()
           vts{*this, nullptr, juce::Identifier ("YmmySettings"), createParameterLayout()},
           channelGroup(0), settings{0} {
 
-//  addSynth(std::make_unique<FluidSynthSynth>(vts));
-  addSynth(std::make_unique<YM2151Synth>(vts));
+  addSynth(std::make_unique<FluidSynthSynth>(vts));
+//  addSynth(std::make_unique<YM2151Synth>(vts));
 
 //  addSettingsToVTS();
 //  FluidSynthSynth::getInitialChildValueTree();
@@ -33,13 +33,19 @@ AudioProcessorValueTreeState::ParameterLayout YmmyProcessor::createParameterLayo
 
 //  std::make_unique<AudioParameterInt>("channel", "currently selected channel", 0, maxChannels, MidiConstants::midiMinValue, "Channel" );
 
-
   auto fluidSynthParams = FluidSynthSynth::createParameterGroup();
   // Add groups to the layout
   layout.add(std::move(fluidSynthParams));
 //  layout.add(std::move(ym2151Params));
 
   return layout;
+}
+
+// returns true if sysex was handled, or false if it was ignored
+bool YmmyProcessor::handleSysex(MidiMessage& message) {
+  auto sysexData = message.getSysExData();
+  auto sysexDataSize = message.getSysExDataSize();
+  return false;
 }
 
 void YmmyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
@@ -54,7 +60,9 @@ void YmmyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
 
     // Initialize MidiBuffers for each Synth
     for (auto& synth : synths) {
-      synthMidiBuffers[synth.get()] = juce::MidiBuffer();
+      if (synthMidiBuffers.find(synth.get()) == synthMidiBuffers.end()) {
+        synthMidiBuffers[synth.get()] = juce::MidiBuffer();
+      }
     }
 
     // Iterate through all MidiMessages
@@ -63,6 +71,11 @@ void YmmyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
     int samplePosition;
     while (it.getNextEvent(message, samplePosition)) {
 //      DEBUG_PRINT(m.getDescription());
+      if (message.isSysEx()) {
+        if (handleSysex(message)) {
+          continue;
+        }
+      }
 
       int channel = message.getChannel() + (channelGroup * 16);
       if (synths.size() == 1) {
@@ -85,7 +98,9 @@ void YmmyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
 
     // Process each Synth with its corresponding MidiBuffer
     for (auto& synth : synths) {
-      synth->processBlock(buffer, synthMidiBuffers[synth.get()]);
+      auto midiBuffer = synthMidiBuffers[synth.get()];
+      synth->processBlock(buffer, midiBuffer);
+      midiBuffer.clear();
     }
 }
 

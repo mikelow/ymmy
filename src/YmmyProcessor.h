@@ -69,11 +69,13 @@ public:
   MidiKeyboardState keyboardState;
 
 private:
+  bool handleSysex(MidiMessage& message);
+  AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
   YmmySettings settings;
   std::vector<std::unique_ptr<Synth>> synths;
   std::unordered_map<int, Synth*> channelToSynthMap;
 //    std::unique_ptr<juce::AudioProcessorValueTreeState> state;
-  AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
 //  Synthesiser synth;
   AudioProcessorValueTreeState vts;

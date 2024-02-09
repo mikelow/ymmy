@@ -62,10 +62,15 @@ public:
   void loadFontFromMemory(void *sf, fluid_long_long_t fileSize);
 
 private:
+  uint32_t read6BitVariableLengthQuantity(const uint8_t* buffer, int maxLength, int& bytesRead);
+  void read7BitChunk(const uint8_t* encodedData, uint8_t* decodedData);
+  void handleSysex(MidiMessage& message);
   void processMidiMessage(MidiMessage& m);
 
 private:
   static const StringArray programChangeParams;
+  int32_t incomingSF2Size;
+  juce::MemoryBlock incomingSF2File;
 
   int sfont_id;
   int selectedGroup;
