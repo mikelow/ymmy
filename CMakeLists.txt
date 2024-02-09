@@ -66,20 +66,6 @@ target_sources(${PROJECT_NAME}
     "./lib/ymfm/src/ymfm_opm.cpp"
 )
 
-# Create ymmy_network library to provide plugin network interface
-add_library(ymmy_network STATIC
-    "${SRC_DIR}/network/InstrClient.cpp"
-    "${SRC_DIR}/network/PendingCalls.cpp"
-    "${SRC_DIR}/network/InstrServerMessage.cpp"
-)
-target_include_directories(ymmy_network INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_definitions(ymmy_network PUBLIC
-    JUCE_USE_CURL=0
-    JUCE_WEB_BROWSER=0
-)
-target_link_libraries(ymmy_network PRIVATE juce::juce_core)
-
-
 # Fluidsynth library options
 set(enable-floats ON CACHE BOOL "Enable floats")
 set(enable-libsndfile ON CACHE BOOL "Enable libsndfile")
