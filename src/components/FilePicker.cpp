@@ -1,8 +1,11 @@
 #include "FilePicker.h"
 
-FilePicker::FilePicker(AudioProcessorValueTreeState& valueTreeState)
+FilePicker::FilePicker(AudioProcessorValueTreeState& valueTreeState,
+                       const ValueTree& path,
+                       const String& fileBrowserWildcard,
+                       const String& textWhenNothingSelected)
     : VTSAwareComponent<FilenameComponent>(
-          valueTreeState, fileChooser, { "soundFont", { { "path", "" } }, {} }
+          valueTreeState, fileChooser, path
       ),
       fileChooser(
           "File Path",
@@ -10,10 +13,13 @@ FilePicker::FilePicker(AudioProcessorValueTreeState& valueTreeState)
           true,
           false,
           false,
-          "*.sf2;*.sf3",
+          fileBrowserWildcard,
           String(),
-          "Select a SoundFont file") {
-  setDisplayedFilePath(valueTreeState.state.getChildWithName("soundFont").getProperty("path", ""));
+          textWhenNothingSelected) {
+  auto typeName = path.getType();
+  auto propName = path.getPropertyName(0);
+//  setDisplayedFilePath(valueTreeState.state.getChildWithName("soundFont").getProperty("path", ""));
+  setDisplayedFilePath(valueTreeState.state.getChildWithName(typeName).getProperty(propName, ""));
 
   addAndMakeVisible (fileChooser);
   fileChooser.addListener(this);

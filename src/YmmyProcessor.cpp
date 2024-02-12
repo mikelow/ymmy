@@ -11,7 +11,7 @@ YmmyProcessor::YmmyProcessor()
           channelGroup(0), settings{0} {
 
   addSynth(std::make_unique<FluidSynthSynth>(vts));
-//  addSynth(std::make_unique<YM2151Synth>(vts));
+//  addSynth(std::make_unique<YM2151Synth>(this, vts));
 
 //  addSettingsToVTS();
 //  FluidSynthSynth::getInitialChildValueTree();
@@ -34,8 +34,10 @@ AudioProcessorValueTreeState::ParameterLayout YmmyProcessor::createParameterLayo
 //  std::make_unique<AudioParameterInt>("channel", "currently selected channel", 0, maxChannels, MidiConstants::midiMinValue, "Channel" );
 
   auto fluidSynthParams = FluidSynthSynth::createParameterGroup();
+  auto ym2151SynthParams = YM2151Synth::createParameterGroup();
   // Add groups to the layout
   layout.add(std::move(fluidSynthParams));
+  layout.add(std::move(ym2151SynthParams));
 //  layout.add(std::move(ym2151Params));
 
   return layout;
@@ -243,8 +245,9 @@ void YmmyProcessor::setStateInformation (const void* data, int sizeInBytes) {
 //      createParameterLayout();
       auto rootTree = getInitialChildValueTree();
       auto fluidTree = FluidSynthSynth::getInitialChildValueTree();
+      auto ym2151Tree = YM2151Synth::getInitialChildValueTree();
 
-      for (auto initTree: { rootTree, fluidTree}) {
+      for (auto initTree: { rootTree, fluidTree, ym2151Tree}) {
         for (auto i = initTree.getNumChildren(); --i >= 0;) {
           auto child = initTree.getChild(i);  //.createCopy();
 //          if (xmlTree.hasType(child.getType())) {
@@ -282,6 +285,7 @@ void YmmyProcessor::setStateInformation (const void* data, int sizeInBytes) {
 
       DBG(vts.state.toXmlString());
       vts.state.getChildWithName("soundFont").sendPropertyChangeMessage("path");
+      vts.state.getChildWithName("opmFile").sendPropertyChangeMessage("path");
     }
   }
 }

@@ -7,7 +7,10 @@ class FilePicker: public VTSAwareComponent<FilenameComponent>,
                   private FilenameComponentListener
 {
 public:
-  FilePicker(AudioProcessorValueTreeState& valueTreeState);
+  FilePicker(AudioProcessorValueTreeState& valueTreeState,
+             const ValueTree& path,
+             const String& fileBrowserWildcard,
+             const String& textWhenNothingSelected);
   ~FilePicker() override;
 
   void setDisplayedFilePath(const String&);

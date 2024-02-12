@@ -3,23 +3,75 @@
 OPMFileLoader::OPMFileLoader() {}
 OPMFileLoader::~OPMFileLoader() {}
 
+bool tryParseUInt8(std::istringstream& iss, uint8_t& value) {
+  int temp;
+  if (iss >> temp && temp >= 0 && temp <= 255) {
+    value = static_cast<uint8_t>(temp);
+    return true;
+  }
+  return false;
+}
+
+void trimNewline(std::string& str) {
+  if (!str.empty() && str.back() == '\r') {
+    str.pop_back();
+  }
+}
+
 void OPMFileLoader::parseOperatorParams(const std::string& line, OPMOpParams& op) {
-  std::istringstream iss(line);
-  iss >> op.AR >> op.D1R >> op.D2R >> op.RR >> op.D1L >> op.TL >> op.KS >> op.MUL >> op.DT1 >>
-      op.DT2 >> op.AMS_EN;
+  std::istringstream iss(line.substr(3)); // Skip the "LFO:" part
+  if (tryParseUInt8(iss, op.AR) &&
+      tryParseUInt8(iss, op.D1R) &&
+      tryParseUInt8(iss, op.D2R) &&
+      tryParseUInt8(iss, op.RR) &&
+      tryParseUInt8(iss, op.D1L) &&
+      tryParseUInt8(iss, op.TL) &&
+      tryParseUInt8(iss, op.KS) &&
+      tryParseUInt8(iss, op.MUL) &&
+      tryParseUInt8(iss, op.DT1) &&
+      tryParseUInt8(iss, op.DT2) &&
+      tryParseUInt8(iss, op.AMS_EN)) {
+    // Successfully parsed all LFO parameters
+  } else {
+    std::cerr << "Error parsing LFO parameters: " << line << std::endl;
+    // Handle the error appropriately
+  }
 }
 
 void OPMFileLoader::parseChannelParams(const std::string& line, OPMChannelParams& ch) {
-  std::istringstream iss(line);
-  iss >> ch.PAN >> ch.FL >> ch.CON >> ch.AMS >> ch.PMS >> ch.SLOT >> ch.NE;
+//  std::istringstream iss(line);
+//  iss >> ch.PAN >> ch.FL >> ch.CON >> ch.AMS >> ch.PMS >> ch.SLOT_MASK >> ch.NE;
+
+std::istringstream iss(line.substr(3)); // Skip the "LFO:" part
+if (tryParseUInt8(iss, ch.PAN) &&
+    tryParseUInt8(iss, ch.FL) &&
+    tryParseUInt8(iss, ch.CON) &&
+    tryParseUInt8(iss, ch.AMS) &&
+    tryParseUInt8(iss, ch.PMS) &&
+    tryParseUInt8(iss, ch.SLOT_MASK) &&
+    tryParseUInt8(iss, ch.NE)) {
+  // Successfully parsed all LFO parameters
+} else {
+  std::cerr << "Error parsing LFO parameters: " << line << std::endl;
+  // Handle the error appropriately
+}
 }
 
 void OPMFileLoader::parseLFOParams(const std::string& line, OPMLFOParams& lfo) {
-  std::istringstream iss(line);
-  iss >> lfo.LFRQ >> lfo.AMD >> lfo.PMD >> lfo.WF >> lfo.WF >> lfo.NFRQ;
+  std::istringstream iss(line.substr(4)); // Skip the "LFO:" part
+  if (tryParseUInt8(iss, lfo.LFRQ) &&
+      tryParseUInt8(iss, lfo.AMD) &&
+      tryParseUInt8(iss, lfo.PMD) &&
+      tryParseUInt8(iss, lfo.WF) &&
+      tryParseUInt8(iss, lfo.NFRQ)) {
+    // Successfully parsed all LFO parameters
+  } else {
+    std::cerr << "Error parsing LFO parameters: " << line << std::endl;
+    // Handle the error appropriately
+  }
 }
 
-std::vector<OPMPatch> OPMFileLoader::readOpmFile(const std::string& fileName) {
+std::vector<OPMPatch> OPMFileLoader::parseOpmFile(const std::string& fileName) {
   std::ifstream file(fileName);
   std::string line;
   std::vector<OPMPatch> patches;
@@ -35,7 +87,7 @@ std::vector<OPMPatch> OPMFileLoader::readOpmFile(const std::string& fileName) {
     if (line.empty() || line[0] == '/')
       continue;
 
-    auto substr = line.substr(0, 4);
+    auto substr = line.substr(0, 3);
 
     if (substr[0] == '@' && substr[1] == ':') {
       if (!currentPatch.name.empty()) {
@@ -43,19 +95,27 @@ std::vector<OPMPatch> OPMFileLoader::readOpmFile(const std::string& fileName) {
         currentPatch = OPMPatch();
       }
       std::istringstream iss(line.substr(2));  // Remove '@' and parse
-      iss >> currentPatch.number >> currentPatch.name;
+      if (!tryParseUInt8(iss, currentPatch.number)) {
+        return {};
+      }
+      // Skip any additional whitespace after the number
+      iss >> std::ws;
+
+      // Get the remainder of the line as the patch name
+      std::getline(iss, currentPatch.name);
+      trimNewline(currentPatch.name); // Trim the newline character if present
     } else if (substr == "LFO") {
-      parseLFOParams(line.substr(4), currentPatch.lfoParams);
+      parseLFOParams(line, currentPatch.lfoParams);
     } else if (substr == "CH:") {
-      parseChannelParams(line.substr(3), currentPatch.channelParams);
+      parseChannelParams(line, currentPatch.channelParams);
     } else if (substr == "M1:") {
-      parseOperatorParams(line.substr(3), currentPatch.opParams[0]);
+      parseOperatorParams(line, currentPatch.opParams[0]);
     } else if (substr == "C1:") {
-      parseOperatorParams(line.substr(3), currentPatch.opParams[1]);
+      parseOperatorParams(line, currentPatch.opParams[1]);
     } else if (substr == "M2:") {
-      parseOperatorParams(line.substr(3), currentPatch.opParams[2]);
+      parseOperatorParams(line, currentPatch.opParams[2]);
     } else if (substr == "C2:") {
-      parseOperatorParams(line.substr(3), currentPatch.opParams[3]);
+      parseOperatorParams(line, currentPatch.opParams[3]);
     }
   }
 

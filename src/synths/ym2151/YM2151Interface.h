@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ymfm_opm.h"
+#include "OPMFileLoader.h"
 
 class YM2151Interface : public ymfm::ymfm_interface {
 public:
@@ -69,6 +70,28 @@ public:
     expire_engine_timer();
   }
 
+  void changePreset(OPMPatch patch, int chan) {
+    write(0x0F, (patch.channelParams.NE << 7) | (patch.lfoParams.NFRQ));
+    write(0x18, patch.lfoParams.LFRQ);
+    // confused about PMD vs AMD application here
+    write(0x19, patch.lfoParams.PMD);
+    // confused about CC bits
+    write(0x1B, patch.lfoParams.WF);
+    write(0x20 + chan, patch.channelParams.PAN | (patch.channelParams.FL << 3) | patch.channelParams.CON);
+    write(0x38 + chan, (patch.channelParams.PMS << 4) | patch.channelParams.AMS);
+
+    for (size_t i = 0; i < sizeof(patch.opParams) / sizeof(patch.opParams[0]); i++) {
+      OPMOpParams& op = patch.opParams[i];
+      write(0x40 + (i*8) + chan, (op.DT1 << 4) | op.MUL);
+      write(0x80 + (i*8) + chan, (op.KS << 6) | op.AR);
+      write(0xA0 + (i*8) + chan, op.AMS_EN | op.D1R);
+      write(0xC0 + (i*8) + chan, (op.DT2 << 6) | op.D2R);
+      write(0xE0 + (i*8) + chan, (op.D1L << 4) | op.RR);
+    }
+
+    // TODO: Need to consider how to handle SLOT_MASK
+  }
+
 //  void generate(int16_t* output, uint32_t numsamples) {
 //    int s = 0;
 //    int ls, rs;
@@ -96,6 +119,10 @@ public:
         out[c][i] = normalizedSample;
       }
     }
+  }
+
+  uint32_t sample_rate(uint32_t input_clock) const {
+    return m_chip.sample_rate(input_clock);
   }
 
   // Function to convert an array of 32-bit unsigned ints to 32-bit floats

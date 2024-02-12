@@ -7,20 +7,20 @@
 #include <vector>
 
 struct OPMOpParams {
-  int AR, D1R, D2R, RR, D1L, TL, KS, MUL, DT1, DT2, AMS_EN;
+  uint8_t AR, D1R, D2R, RR, D1L, TL, KS, MUL, DT1, DT2, AMS_EN;
 };
 
 struct OPMChannelParams {
-  int PAN, FL, CON, AMS, PMS, SLOT, NE;
+  uint8_t PAN, FL, CON, AMS, PMS, SLOT_MASK, NE;
 };
 
 struct OPMLFOParams {
-  int LFRQ, AMD, PMD, WF, NFRQ;
+  uint8_t LFRQ, AMD, PMD, WF, NFRQ;
 };
 
 struct OPMPatch {
   std::string name;
-  int number;
+  uint8_t number;
   OPMLFOParams lfoParams;
   OPMChannelParams channelParams;
   OPMOpParams opParams[4];
@@ -34,7 +34,7 @@ public:
   OPMFileLoader();
   ~OPMFileLoader();
 
-  static std::vector<OPMPatch> readOpmFile(const std::string& fileName);
+  static std::vector<OPMPatch> parseOpmFile(const std::string& fileName);
 
 private:
   static void parseOperatorParams(const std::string& line, OPMOpParams& op);

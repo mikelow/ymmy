@@ -6,7 +6,12 @@
 FluidSynthComponent::FluidSynthComponent(juce::AudioProcessorValueTreeState& valueTreeState)
     : SynthComponent(valueTreeState),
 //      synth(s),
-      fileChooser(valueTreeState),
+      fileChooser(
+          valueTreeState,
+          { "soundFont", { { "path", "" } }, {} },
+          "*.sf2;*.sf3",
+          "Select a SoundFont file"
+      ),
       presetButton(""),
       attackSlider(vts, FluidSynthParam::ATTACK_RATE),
       holdSlider(vts, FluidSynthParam::HOLD),

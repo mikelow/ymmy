@@ -5,12 +5,14 @@
 #include "YM2151Interface.h"
 #include "OPMFileLoader.h"
 
+class YmmyProcessor;
+
 class YM2151Synth: public Synth,
                     public ValueTree::Listener,
                     public AudioProcessorValueTreeState::Listener,
                     public ymfm::ymfm_interface {
 public:
-  YM2151Synth(AudioProcessorValueTreeState& vts);
+  YM2151Synth(YmmyProcessor* processor, AudioProcessorValueTreeState& vts);
   ~YM2151Synth();
   void initialize();
   void reset();
@@ -41,10 +43,17 @@ public:
   inline virtual void valueTreeParentChanged (ValueTree& treeWhoseParentHasChanged) override {};
   virtual void valueTreeRedirected (ValueTree& treeWhichHasBeenChanged) override;
 
-private:
-  void processMidiMessage(MidiMessage& m);
+  void refreshBanks(std::vector<OPMPatch>& patches);
 
 private:
+  void processMidiMessage(MidiMessage& m);
+  OPMPatch loadPresetFromVST(int bankNum, int presetNum);
+
+private:
+  YmmyProcessor* processor;
+  LagrangeInterpolator resamplers[2];
+  std::unique_ptr<AudioBuffer<float>> nativeBuffer;
+
   static const StringArray programChangeParams;
 
   int selectedGroup;

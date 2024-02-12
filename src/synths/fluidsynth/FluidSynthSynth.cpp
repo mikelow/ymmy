@@ -576,7 +576,7 @@ void FluidSynthSynth::parameterChanged(const String& parameterID, float newValue
       AudioParameterInt* castParam{dynamic_cast<AudioParameterInt*>(param)};
       preset = castParam->get();
     }
-    int bankOffset{fluid_synth_get_bank_offset(synth.get(), sfont_id)};
+    int bankOffset = fluid_synth_get_bank_offset(synth.get(), sfont_id);
     fluid_synth_program_select(
       synth.get(),
       selectedChannel + (selectedGroup*16),
