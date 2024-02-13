@@ -102,8 +102,8 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       }
       break;
     case NOTE_ON: {
-      std::mt19937 engine{std::random_device{}()};
-      std::uniform_int_distribution<uint8_t> dist(0, 127);
+//      std::mt19937 engine{std::random_device{}()};
+//      std::uniform_int_distribution<uint8_t> dist(0, 127);
 
 //      interface.write(0x0F, 0x00);
 
@@ -134,12 +134,15 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 //        interface.write(0x40 + i, 0);
 //      }
 //
-      for (int i = 0; i < 8 * 4; ++i) {
-        uint8_t randomByte = dist(engine);
-        interface.write(0x60 + i, 0x10);
-      }
 //      for (int i = 0; i < 8 * 4; ++i) {
 //        uint8_t randomByte = dist(engine);
+//        interface.write(0x60 + i, 0x10);
+////        interface.write(0x60 + i, 0x7f);
+////        interface.write(0x60 + i, randomByte);
+//      }
+//      for (int i = 0; i < 8 * 4; ++i) {
+//        uint8_t randomByte = dist(engine);
+//        interface.write(0x80 + i, 0x1F);
 //        interface.write(0x80 + i, 0x1F);
 //      }
 //      for (int i = 0; i < 8 * 4; ++i) {

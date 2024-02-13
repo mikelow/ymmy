@@ -73,9 +73,8 @@ public:
   void changePreset(OPMPatch patch, int chan) {
     write(0x0F, (patch.channelParams.NE << 7) | (patch.lfoParams.NFRQ));
     write(0x18, patch.lfoParams.LFRQ);
-    // confused about PMD vs AMD application here
-    write(0x19, patch.lfoParams.PMD);
-    // confused about CC bits
+    write(0x19, patch.lfoParams.PMD | 0x80);
+    write(0x19, patch.lfoParams.AMD & 0x7F);
     write(0x1B, patch.lfoParams.WF);
     write(0x20 + chan, patch.channelParams.PAN | (patch.channelParams.FL << 3) | patch.channelParams.CON);
     write(0x38 + chan, (patch.channelParams.PMS << 4) | patch.channelParams.AMS);
@@ -83,6 +82,7 @@ public:
     for (size_t i = 0; i < sizeof(patch.opParams) / sizeof(patch.opParams[0]); i++) {
       OPMOpParams& op = patch.opParams[i];
       write(0x40 + (i*8) + chan, (op.DT1 << 4) | op.MUL);
+      write(0x60 + (i*8) + chan, op.TL);
       write(0x80 + (i*8) + chan, (op.KS << 6) | op.AR);
       write(0xA0 + (i*8) + chan, op.AMS_EN | op.D1R);
       write(0xC0 + (i*8) + chan, (op.DT2 << 6) | op.D2R);

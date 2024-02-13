@@ -65,6 +65,7 @@ void YM2151Component::populatePresetMenu(PopupMenu& menu) {
 
   for (int b = 0; b < numBanks; ++b) {
     PopupMenu subMenu;
+    PopupMenu& menuToPop = (numBanks == 1) ? menu : subMenu;
 
     ValueTree bank = banks.getChild(b);
     int numBankChildren = bank.getNumChildren();
@@ -87,7 +88,10 @@ void YM2151Component::populatePresetMenu(PopupMenu& menu) {
         this->presetButton.setButtonText(presetName);
       };
 
-      subMenu.addItem(String(presetNum) + " " + presetName, callback);
+      menuToPop.addItem(String(presetNum) + " " + presetName, callback);
+    }
+    if (numBanks == 1) {
+      return;
     }
     menu.addSubMenu("Bank " + String(b), subMenu);
   }

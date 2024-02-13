@@ -111,9 +111,9 @@ std::vector<OPMPatch> OPMFileLoader::parseOpmFile(const std::string& fileName) {
     } else if (substr == "M1:") {
       parseOperatorParams(line, currentPatch.opParams[0]);
     } else if (substr == "C1:") {
-      parseOperatorParams(line, currentPatch.opParams[1]);
-    } else if (substr == "M2:") {
       parseOperatorParams(line, currentPatch.opParams[2]);
+    } else if (substr == "M2:") {
+      parseOperatorParams(line, currentPatch.opParams[1]);
     } else if (substr == "C2:") {
       parseOperatorParams(line, currentPatch.opParams[3]);
     }

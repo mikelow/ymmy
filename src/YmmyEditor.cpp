@@ -76,8 +76,7 @@ YmmyEditor::YmmyEditor(YmmyProcessor& p, juce::AudioProcessorValueTreeState& vts
 //  incChannelButton.addListener(this);
 //  decChannelButton.addListener(this);
 
-//  setCurrentSynth(YM2151);
-  setCurrentSynth(FluidSynth);
+  setCurrentSynth(YM2151);
 
   vts.state.addListener(this);
 }

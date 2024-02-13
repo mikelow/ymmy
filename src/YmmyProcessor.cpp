@@ -10,8 +10,8 @@ YmmyProcessor::YmmyProcessor()
           vts{*this, nullptr, juce::Identifier ("YmmySettings"), createParameterLayout()},
           channelGroup(0), settings{0} {
 
-  addSynth(std::make_unique<FluidSynthSynth>(vts));
-//  addSynth(std::make_unique<YM2151Synth>(this, vts));
+//  addSynth(std::make_unique<FluidSynthSynth>(vts));
+  addSynth(std::make_unique<YM2151Synth>(this, vts));
 
 //  addSettingsToVTS();
 //  FluidSynthSynth::getInitialChildValueTree();
