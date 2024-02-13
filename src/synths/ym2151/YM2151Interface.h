@@ -115,6 +115,9 @@ public:
     for (uint32_t i = 0; i < numSamples; ++i) {
       m_chip.generate(&opm_out);
       for (int c=0; c<2; ++c) {
+        if (opm_out.data[c] > 32767 || opm_out.data[c] < -32768) {
+          printf("NEED TO CLIP");
+        }
         float normalizedSample = (static_cast<float>(opm_out.data[c]) / maxInt);
         out[c][i] = normalizedSample;
       }
