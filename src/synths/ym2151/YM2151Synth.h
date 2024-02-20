@@ -20,6 +20,7 @@ public:
   static std::unique_ptr<juce::AudioProcessorParameterGroup> createParameterGroup();
   static const ValueTree getInitialChildValueTree();
 
+  SynthType getSynthType() override { return YM2151; }
   void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
   void prepareToPlay (double sampleRate, int samplesPerBlock) override;
   int getNumPrograms() override;

@@ -77,6 +77,7 @@ YmmyEditor::YmmyEditor(YmmyProcessor& p, juce::AudioProcessorValueTreeState& vts
 //  decChannelButton.addListener(this);
 
   setCurrentSynth(YM2151);
+//  setCurrentSynth(audioProcessor.getSelectedSynth());
 
   vts.state.addListener(this);
 }
@@ -113,11 +114,17 @@ void YmmyEditor::sliderValueChanged(juce::Slider* slider) {
     int newChannel = static_cast<int>(slider->getValue());
     audioProcessor.setSelectedChannel(newChannel-1);
     midiKeyboard.setMidiChannel(newChannel);
+
+    auto selectedSynth = audioProcessor.getSelectedSynth();
+    if (selectedSynth) {
+      setCurrentSynth(selectedSynth->getSynthType());
+    }
   } else if (slider == &groupSlider) {
     int newGroup = static_cast<int>(slider->getValue());
     printf("channelGroup set: %d\n", newGroup);
     audioProcessor.setSelectedGroup(newGroup-1);
   }
+
 }
 
 void YmmyEditor::buttonClicked(Button* button) {

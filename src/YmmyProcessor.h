@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../JuceLibraryCode/JuceHeader.h"
+#include "YmmyEditor.h"
 
 class Synth;
 
@@ -66,10 +67,15 @@ public:
   void addSynth(std::unique_ptr<Synth> synth);
   void removeSynth(Synth* synth);
 
+  void setSynthForChannel(int channelGroup, int channel, SynthType synthType);
+
   MidiKeyboardState keyboardState;
 
 private:
   bool handleSysex(MidiMessage& message);
+  template <typename T> T* findSynth(const std::vector<std::unique_ptr<Synth>>& synths);
+  Synth* synthTypeToSynth(SynthType synthType);
+
   AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
   YmmySettings settings;

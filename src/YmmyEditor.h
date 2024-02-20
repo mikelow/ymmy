@@ -1,11 +1,11 @@
 #pragma once
 
 #include "../JuceLibraryCode/JuceHeader.h"
+#include "synths/Synth.h"
 
 class YmmyProcessor;
 class SynthComponent;
-
-enum SynthType { FluidSynth, YM2151 };
+class Synth;
 
 class YmmyEditor :
     public AudioProcessorEditor,
@@ -34,7 +34,7 @@ private:
   // access the processor object that created it.
   YmmyProcessor& audioProcessor;
   AudioProcessorValueTreeState& valueTreeState;
-
+//  Synth* currentSynth = nullptr;
   std::unique_ptr<SynthComponent> currentSynth;
 
   LookAndFeel* laf;

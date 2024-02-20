@@ -10,9 +10,11 @@ YmmyProcessor::YmmyProcessor()
           vts{*this, nullptr, juce::Identifier ("YmmySettings"), createParameterLayout()},
           channelGroup(0), settings{0} {
 
-//  addSynth(std::make_unique<FluidSynthSynth>(vts));
+  addSynth(std::make_unique<FluidSynthSynth>(vts));
   addSynth(std::make_unique<YM2151Synth>(this, vts));
 
+  setSynthForChannel(0, 0, YM2151);
+  setSynthForChannel(0, 1, FluidSynth);
 //  addSettingsToVTS();
 //  FluidSynthSynth::getInitialChildValueTree();
 //  FluidSynthSynth::updateValueTreeState(vts);
@@ -353,4 +355,34 @@ void YmmyProcessor::addSynth(std::unique_ptr<Synth> synth) {
 
 void YmmyProcessor::removeSynth(Synth* synth) {
   // Remove synth from the list and update the MIDI channel map
+
 }
+
+template <typename T>
+T* YmmyProcessor::findSynth(const std::vector<std::unique_ptr<Synth>>& synths) {
+  auto it = std::find_if(synths.begin(), synths.end(), [](const std::unique_ptr<Synth>& synthPtr) -> bool {
+    return dynamic_cast<T*>(synthPtr.get()) != nullptr;
+  });
+
+  if (it != synths.end()) {
+    return dynamic_cast<T*>((*it).get());
+  } else {
+    return nullptr;
+  }
+}
+
+Synth* YmmyProcessor::synthTypeToSynth(SynthType synthType) {
+  switch (synthType) {
+    case FluidSynth:
+      return findSynth<FluidSynthSynth>(synths);
+    case YM2151:
+      return findSynth<YM2151Synth>(synths);
+  }
+  return nullptr;
+}
+
+void YmmyProcessor::setSynthForChannel(int channelGroup, int channel, SynthType synthType) {
+  auto synth = synthTypeToSynth(synthType);
+  channelToSynthMap[(channelGroup*16) + channel] = synth;
+}
+
