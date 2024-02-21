@@ -187,29 +187,33 @@ void YM2151Synth::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     processMidiMessage(m);
   }
 
-
-  buffer.clear();
   auto bufferWritePointers = buffer.getArrayOfWritePointers();
   if (buffer.getNumChannels() < 2) {
     AlertWindow::showMessageBoxAsync (AlertWindow::WarningIcon,"Error",
                                      "Expected at least 2 write buffers for stereo playback. Is there a problem with the current audio device?.");
     return;
   }
-//  float* readBuffers[2] = {bufferReadPointers[0], bufferReadPointers[1] };
-//  interface.generate(writeBuffers, buffer.getNumSamples());
 
-//  float* writeBuffers[2] = {bufferWritePointers[0], bufferWritePointers[1] };
   auto nativeBufferWritePointers = nativeBuffer->getArrayOfWritePointers();
-  float* writeBuffers[2] = {nativeBufferWritePointers[0], nativeBufferWritePointers[1] };
+  float* writeBuffers[2] = {nativeBufferWritePointers[0], nativeBufferWritePointers[1]};
 
   int numNativeSamples = nativeBuffer->getNumSamples();
   double ratio = static_cast<double>(nativeBuffer->getNumSamples()) / processor->getSampleRate();
-  interface.generate(writeBuffers, ceil(buffer.getNumSamples() * ratio)); //numNativeSamples);
+  interface.generate(writeBuffers, ceil(buffer.getNumSamples() * ratio));
 
-  for (int i = 0; i < 2; ++i) {
-    resamplers[i].process(ratio, nativeBufferWritePointers[i], bufferWritePointers[i], buffer.getNumSamples());
+  // Mix generated samples with existing content in the buffer
+  for (int channel = 0; channel < 2; ++channel) {
+    float* output = bufferWritePointers[channel];
+    float tempBuffer[buffer.getNumSamples()];
+
+    // Use the resampler to write into a temporary buffer
+    resamplers[channel].process(ratio, nativeBufferWritePointers[channel], tempBuffer, buffer.getNumSamples());
+
+    // Add the contents of the tempBuffer to the output buffer
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+      output[sample] += tempBuffer[sample];
+    }
   }
-//  interface.generate(writeBuffers, buffer.getNumSamples());
 }
 
 void YM2151Synth::prepareToPlay(double sampleRate, int samplesPerBlock) {

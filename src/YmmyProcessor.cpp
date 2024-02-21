@@ -81,7 +81,7 @@ void YmmyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
         }
       }
 
-      int channel = message.getChannel() + (channelGroup * 16);
+      int channel = message.getChannel() - 1 + (channelGroup * 16);
       if (synths.size() == 1) {
         synthMidiBuffers[synths[0].get()].addEvent(message, samplePosition);
       } else if (channelToSynthMap.count(channel) > 0) {
