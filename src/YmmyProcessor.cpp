@@ -21,6 +21,7 @@ YmmyProcessor::YmmyProcessor()
 }
 
 YmmyProcessor::~YmmyProcessor() {
+  synths.clear();
 }
 
 template <typename T>

@@ -15,6 +15,7 @@ enum SynthType { FluidSynth, YM2151 };
 class Synth {
 public:
   Synth(AudioProcessorValueTreeState& valueTreeState);
+  virtual ~Synth() = default;
 
   virtual SynthType getSynthType() = 0;
 //  virtual std::unique_ptr<juce::AudioProcessorParameterGroup> createParameterGroup() = 0;
