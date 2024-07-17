@@ -11,10 +11,10 @@ YmmyProcessor::YmmyProcessor()
           channelGroup(0), settings{0} {
 
   addSynth(std::make_unique<FluidSynthSynth>(vts));
-  // addSynth(std::make_unique<YM2151Synth>(this, vts));
+  addSynth(std::make_unique<YM2151Synth>(this, vts));
 
-  // setSynthForChannel(0, 0, YM2151);
-  // setSynthForChannel(0, 1, FluidSynth);
+  setSynthForChannel(0, 0, YM2151);
+  setSynthForChannel(0, 1, FluidSynth);
 //  addSettingsToVTS();
 //  FluidSynthSynth::getInitialChildValueTree();
 //  FluidSynthSynth::updateValueTreeState(vts);
