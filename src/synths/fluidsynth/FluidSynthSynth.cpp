@@ -157,7 +157,7 @@ void FluidSynthSynth::initialize() {
 
   fluid_synth_set_reverb_on(synth.get(), true);
   //    fluid_synth_set_reverb(synth.get(), 0.7, 0.4, 0.5, 0.5);
-  fluid_synth_set_reverb(synth.get(), 0.5, 0.8, 0.5, 0.3);
+  fluid_synth_set_reverb(synth.get(), 0.8, 0.3, 0.8, 0.8);
 
   fluid_sfloader_t *my_sfloader = new_fluid_defsfloader(settings.get());
   fluid_sfloader_set_callbacks(my_sfloader, mem_open, mem_read, mem_seek, mem_tell, mem_close);
@@ -437,6 +437,7 @@ void FluidSynthSynth::processMidiMessage(MidiMessage& m) {
         int value = m.getControllerValue();
         uint8_t programNum = value & 0x7F;
         uint8_t bank = (value >> 7) & 0x7F;
+        fluid_synth_set_channel_type(synth.get(), m.getChannel() - 1 + channelGroupOffset, CHANNEL_TYPE_MELODIC);
         fluid_synth_program_change(synth.get(), m.getChannel() - 1 + channelGroupOffset, programNum);
       } else {
         fluid_synth_cc(synth.get(), m.getChannel() - 1 + channelGroupOffset,
@@ -444,6 +445,7 @@ void FluidSynthSynth::processMidiMessage(MidiMessage& m) {
       }
       break;
     case PROGRAM_CHANGE: {
+      fluid_synth_set_channel_type(synth.get(), m.getChannel() - 1 + channelGroupOffset, CHANNEL_TYPE_MELODIC);
       int result = fluid_synth_program_change(synth.get(), m.getChannel() - 1 + channelGroupOffset,
                                               m.getProgramChangeNumber());
       if (result == FLUID_OK) {
