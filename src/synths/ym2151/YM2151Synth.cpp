@@ -204,15 +204,7 @@ void YM2151Synth::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
   // Mix generated samples with existing content in the buffer
   for (int channel = 0; channel < 2; ++channel) {
     float* output = bufferWritePointers[channel];
-    float tempBuffer[buffer.getNumSamples()];
-
-    // Use the resampler to write into a temporary buffer
-    resamplers[channel].process(ratio, nativeBufferWritePointers[channel], tempBuffer, buffer.getNumSamples());
-
-    // Add the contents of the tempBuffer to the output buffer
-    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-      output[sample] += tempBuffer[sample];
-    }
+    resamplers[channel].process(ratio, nativeBufferWritePointers[channel], output, buffer.getNumSamples());
   }
 }
 
@@ -288,7 +280,7 @@ OPMPatch YM2151Synth::loadPresetFromVST(int bankNum, int presetNum) {
   auto preset = bank.getChild(presetNum);
 
   patch.number = static_cast<uint8_t>(static_cast<int>(preset.getProperty("num")));
-  patch.name = static_cast<String>(preset.getProperty("name")).toStdString();
+  patch.name = preset.getProperty("name").toString().toStdString();
 
   auto lfo = preset.getChildWithName("LFO");
   patch.lfoParams.LFRQ = static_cast<uint8_t>(static_cast<int>(lfo.getProperty("LFRQ")));
