@@ -204,7 +204,16 @@ void YM2151Synth::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
   // Mix generated samples with existing content in the buffer
   for (int channel = 0; channel < 2; ++channel) {
     float* output = bufferWritePointers[channel];
-    resamplers[channel].process(ratio, nativeBufferWritePointers[channel], output, buffer.getNumSamples());
+    // resamplers[channel].process(ratio, nativeBufferWritePointers[channel], output, buffer.getNumSamples());
+    float tempBuffer[buffer.getNumSamples()];
+
+    // Use the resampler to write into a temporary buffer
+    resamplers[channel].process(ratio, nativeBufferWritePointers[channel], tempBuffer, buffer.getNumSamples());
+
+    // Add the contents of the tempBuffer to the output buffer
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+      output[sample] += tempBuffer[sample];
+    }
   }
 }
 

@@ -156,8 +156,8 @@ void FluidSynthSynth::initialize() {
   synth = { new_fluid_synth(settings.get()), delete_fluid_synth };
 
   fluid_synth_set_reverb_on(synth.get(), true);
-  //    fluid_synth_set_reverb(synth.get(), 0.7, 0.4, 0.5, 0.5);
-  fluid_synth_set_reverb(synth.get(), 0.8, 0.3, 0.8, 0.8);
+  fluid_synth_set_reverb(synth.get(), 0.7, 0.4, 0.5, 0.5);
+  // fluid_synth_set_reverb(synth.get(), 0.8, 0.3, 0.8, 0.8);
 
   fluid_sfloader_t *my_sfloader = new_fluid_defsfloader(settings.get());
   fluid_sfloader_set_callbacks(my_sfloader, mem_open, mem_read, mem_seek, mem_tell, mem_close);
@@ -355,6 +355,7 @@ void FluidSynthSynth::handleSysex(MidiMessage& message) {
         nullptr, // no response_len pointer because we have no interest in handling response currently
         nullptr, // no handled pointer because we have no interest in handling response currently
         static_cast<int>(false));
+    // return;
   }
   uint8_t sysexCommand = sysexData[1];
   if (sysexCommand >= 0 && sysexCommand < 16) {
@@ -384,7 +385,7 @@ void FluidSynthSynth::handleSysex(MidiMessage& message) {
       }
       incomingSF2Size -= outOffset;
       if (incomingSF2Size <= 0) {
-        // shave off any extraneous extra bytes that weren't read
+        // shave off any extraneous bytes that weren't read
         outOffset += incomingSF2Size;
         incomingSF2Size = 0;
       }

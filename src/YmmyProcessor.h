@@ -72,7 +72,11 @@ public:
   MidiKeyboardState keyboardState;
 
 private:
-  bool handleSysex(MidiMessage& message);
+  bool handleSysex(
+    MidiMessage& message,
+    int samplePosition,
+    std::unordered_map<Synth*, juce::MidiBuffer>& synthMidiBuffers
+  );
   template <typename T> T* findSynth(const std::vector<std::unique_ptr<Synth>>& synths);
   Synth* synthTypeToSynth(SynthType synthType);
 

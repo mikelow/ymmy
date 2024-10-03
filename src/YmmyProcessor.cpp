@@ -4,6 +4,7 @@
 #include "synths/fluidsynth/FluidSynthSynth.h"
 #include "synths/ym2151/YM2151Synth.h"
 #include "MidiConstants.h"
+#include "utility.h"
 
 YmmyProcessor::YmmyProcessor()
         : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
@@ -13,8 +14,8 @@ YmmyProcessor::YmmyProcessor()
   addSynth(std::make_unique<FluidSynthSynth>(vts));
   addSynth(std::make_unique<YM2151Synth>(this, vts));
 
-  setSynthForChannel(0, 0, YM2151);
-  setSynthForChannel(0, 1, FluidSynth);
+  // setSynthForChannel(0, 0, YM2151);
+  // setSynthForChannel(0, 1, FluidSynth);
 //  addSettingsToVTS();
 //  FluidSynthSynth::getInitialChildValueTree();
 //  FluidSynthSynth::updateValueTreeState(vts);
@@ -37,19 +38,78 @@ AudioProcessorValueTreeState::ParameterLayout YmmyProcessor::createParameterLayo
 //  std::make_unique<AudioParameterInt>("channel", "currently selected channel", 0, maxChannels, MidiConstants::midiMinValue, "Channel" );
 
   auto fluidSynthParams = FluidSynthSynth::createParameterGroup();
-  auto ym2151SynthParams = YM2151Synth::createParameterGroup();
+  // auto ym2151SynthParams = YM2151Synth::createParameterGroup();
   // Add groups to the layout
-  layout.add(std::move(fluidSynthParams));
-  layout.add(std::move(ym2151SynthParams));
+  // layout.add(std::move(fluidSynthParams));
+  // layout.add(std::move(ym2151SynthParams));
 //  layout.add(std::move(ym2151Params));
 
   return layout;
 }
 
 // returns true if sysex was handled, or false if it was ignored
-bool YmmyProcessor::handleSysex(MidiMessage& message) {
+bool YmmyProcessor::handleSysex(
+  MidiMessage& message,
+  int samplePosition,
+  std::unordered_map<Synth*, juce::MidiBuffer>& synthMidiBuffers
+) {
   auto sysexData = message.getSysExData();
   auto sysexDataSize = message.getSysExDataSize();
+
+  if (sysexData[0] != 0x7D) {
+    return false;
+  }
+  uint8_t opcode = sysexData[1];
+
+  // If it's a wrapped MIDI message, decode it
+  if (opcode >= 0 && opcode < 16) {
+    if (synths.size() == 1) {
+      synthMidiBuffers[synths[0].get()].addEvent(message, samplePosition);
+    } else {
+      auto channelGroup = static_cast<int>(sysexData[1]);
+      auto wrappedMsg = juce::MidiMessage(sysexData + 2, message.getSysExDataSize() - 2, 0);
+      auto channel = wrappedMsg.getChannel() - 1;
+
+      if (auto it = channelToSynthMap.find(channel + channelGroup * 16); it != channelToSynthMap.end() && it->second != nullptr) {
+        // Add the message to the corresponding Synth's MidiBuffer
+        // We might consider checking isMetaEvent() and adding to all synths
+        Synth* synth = it->second;
+        synthMidiBuffers[synth].addEvent(message, samplePosition);
+      } else {
+        DBG("Event channel without assigned synth");
+      }
+    }
+    // processMidiMessage(wrappedMsg);
+    return true;
+  }
+
+  switch (opcode) {
+    case 0x10:
+    case 0x11:
+    case 0x7F: {
+      if (auto fluidSynth = synthTypeToSynth(FluidSynth)) {
+        synthMidiBuffers[fluidSynth].addEvent(message, samplePosition);
+      }
+      break;
+    }
+    case 0x12:
+      break;
+    // assign synth to channel/group
+    case 0x7E: {
+      uint8_t chan = sysexData[2];
+      uint8_t group = sysexData[3];
+      std::string name(reinterpret_cast<const char*>(&sysexData[4]));
+      std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+      auto synthOpt = getValueFromMap(stringToSynthType, name);
+
+      if (synthOpt.has_value()) {
+        setSynthForChannel(group, chan, synthOpt.value());
+      } else {
+        std::cout << "Attempting to set Synth for channel with invalid SynthType string: " << name << std::endl;
+      }
+      return true;
+    }
+  }
   return false;
 }
 
@@ -77,28 +137,10 @@ void YmmyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
     while (it.getNextEvent(message, samplePosition)) {
 //      DEBUG_PRINT(m.getDescription());
       if (message.isSysEx()) {
-        if (handleSysex(message)) {
+        if (handleSysex(message, samplePosition, synthMidiBuffers)) {
           continue;
         }
       }
-
-      int channel = message.getChannel() - 1 + (channelGroup * 16);
-      if (synths.size() == 1) {
-        synthMidiBuffers[synths[0].get()].addEvent(message, samplePosition);
-      } else if (channelToSynthMap.count(channel) > 0) {
-        // Add the message to the corresponding Synth's MidiBuffer
-        // We might consider checking isMetaEvent() and adding to all synths
-        Synth* synth = channelToSynthMap[channel];
-        synthMidiBuffers[synth].addEvent(message, samplePosition);
-      }
-//      else if (message.isSysEx()) {
-//        auto sysexData = m.getSysExData();
-//        auto sysexDataSize = m.getSysExDataSize();
-//        if (sysexData[0] == 0x7D && sysexData[1] < 0x7E) {
-//          channelGroup = static_cast<int>(sysexData[1]);
-//          //          auto wrappedMsg = juce::MidiMessage(sysexData + 2, m.getSysExDataSize() - 2, 0); handleMidiMessage(wrappedMsg);
-//        }
-//      }
     }
 
     // Process each Synth with its corresponding MidiBuffer

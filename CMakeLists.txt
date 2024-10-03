@@ -42,6 +42,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${FLUIDSYNTH_BUILD_DIR}/include"
     "${FLUIDSYNTH_DIR}/include"
     "${YMFM_DIR}/src"
+    ./src/util
 )
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC
