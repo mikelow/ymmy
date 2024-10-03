@@ -31,6 +31,7 @@ public:
   static const ValueTree getInitialChildValueTree();
 
   SynthType getSynthType() override { return FluidSynth; }
+  void receiveFile(juce::MemoryBlock&, SynthFileType fileType) override;
   void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
   void prepareToPlay (double sampleRate, int samplesPerBlock) override;
   int getNumPrograms() override;
@@ -70,8 +71,8 @@ private:
 
 private:
   static const StringArray programChangeParams;
-  int32_t incomingSF2Size;
-  juce::MemoryBlock incomingSF2File;
+  // int32_t incomingSF2Size;
+  // juce::MemoryBlock incomingSF2File;
 
   int sfont_id;
   int selectedGroup;

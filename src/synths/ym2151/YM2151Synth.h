@@ -21,6 +21,7 @@ public:
   static const ValueTree getInitialChildValueTree();
 
   SynthType getSynthType() override { return YM2151; }
+  void receiveFile(juce::MemoryBlock&, SynthFileType fileType) override;
   void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
   void prepareToPlay (double sampleRate, int samplesPerBlock) override;
   int getNumPrograms() override;

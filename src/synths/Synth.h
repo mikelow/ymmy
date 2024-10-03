@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../JuceLibraryCode/JuceHeader.h"
+#include "enums.h"
 
 struct IntParameter {
   juce::String id;
@@ -10,18 +11,6 @@ struct IntParameter {
   int defaultVal;
 };
 
-enum SynthType { FluidSynth, YM2151 };
-
-static std::unordered_map<std::string, SynthType> stringToSynthType = {
-  {"soundfont", FluidSynth},
-  {"ym2151", YM2151}
-};
-
-static std::unordered_map<SynthType, std::string> synthTypeToString = {
-  {FluidSynth, "soundfont"},
-  {YM2151, "ym2151"}
-};
-
 class Synth {
 public:
   Synth(AudioProcessorValueTreeState& valueTreeState);
@@ -29,6 +18,7 @@ public:
 
   virtual SynthType getSynthType() = 0;
 //  virtual std::unique_ptr<juce::AudioProcessorParameterGroup> createParameterGroup() = 0;
+  virtual void receiveFile(juce::MemoryBlock&, SynthFileType fileType) = 0;
   virtual void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) = 0;
   virtual void prepareToPlay (double sampleRate, int samplesPerBlock) = 0;
   virtual int getNumPrograms() = 0;

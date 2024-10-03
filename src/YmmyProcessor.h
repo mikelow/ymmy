@@ -91,6 +91,9 @@ private:
   AudioProcessorValueTreeState vts;
   int channelGroup;
 
+  int32_t incomingFileSize;
+  juce::MemoryBlock incomingFile;
+
     //==============================================================================
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YmmyProcessor)
 };

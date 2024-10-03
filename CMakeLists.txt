@@ -42,7 +42,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${FLUIDSYNTH_BUILD_DIR}/include"
     "${FLUIDSYNTH_DIR}/include"
     "${YMFM_DIR}/src"
-    ./src/util
+    ./src/common
 )
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC
@@ -64,6 +64,7 @@ target_sources(${PROJECT_NAME}
     "${SRC_DIR}/synths/ym2151/YM2151Component.cpp"
     "${SRC_DIR}/synths/ym2151/YM2151Synth.cpp"
     "${SRC_DIR}/synths/ym2151/OPMFileLoader.cpp"
+    "${SRC_DIR}/common/utility.cpp"
     "./lib/ymfm/src/ymfm_opm.cpp"
 )
 

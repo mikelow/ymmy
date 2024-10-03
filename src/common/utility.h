@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include "enums.h"
 
 template <typename MapType, typename KeyType>
 std::optional<typename MapType::mapped_type> getValueFromMap(
@@ -13,3 +14,8 @@ std::optional<typename MapType::mapped_type> getValueFromMap(
     return std::nullopt;
   }
 }
+
+uint32_t read6BitVariableLengthQuantity(const uint8_t* buffer, int maxLength, int& bytesRead);
+void read7BitChunk(const uint8_t* encodedData, uint8_t* decodedData);
+
+SynthType fileTypeToSynthType(SynthFileType fileType);

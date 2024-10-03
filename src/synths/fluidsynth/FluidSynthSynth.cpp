@@ -298,49 +298,11 @@ const ValueTree FluidSynthSynth::getInitialChildValueTree() {
     };
 }
 
-
-uint32_t FluidSynthSynth::read6BitVariableLengthQuantity(const uint8_t* buffer, int maxLength, int& bytesRead) {
-  uint32_t value = 0;
-  bytesRead = 0;
-
-  for (size_t i = 0; i < maxLength; ++i) {
-    // Extract the current byte
-    uint8_t currentByte = buffer[i];
-    bytesRead++;
-
-    // Mask off the most significant bit and add the byte to value
-    value = (value << 6) | (currentByte & 0x3F);
-
-    // Check if the most significant bit is not set (last byte of the variable quantity)
-    if ((currentByte & 0x40) == 0) {
-      break; // Last byte of the variable quantity value, stop processing
-    }
-  }
-  return value;
+void FluidSynthSynth::receiveFile(juce::MemoryBlock& data, SynthFileType fileType) {
+  if (fileType != SynthFileType::SoundFont2)
+    return;
+  unloadAndLoadFontFromMemory(data.getData(), data.getSize());
 }
-
-void FluidSynthSynth::read7BitChunk(const uint8_t* encodedData, uint8_t* decodedData) {
-  // Assuming encodedData points to 8 bytes of encoded data,
-  // and decodedData is a buffer large enough to hold 7 bytes of decoded data.
-
-  // Extract the 7 bits from the first byte and distribute them across the 7 bytes
-  for (int i = 0; i < 7; ++i) {
-    // Set the highest bit of each decoded byte based on the first encoded byte
-    decodedData[i] = (encodedData[0] & (1 << i)) ? 0x80 : 0x00;
-  }
-
-  // Now handle the rest of the bytes
-  for (int i = 1; i < 8; ++i) {
-    // If we hit the sysex end before reading all 7 data bytes, we finish early. This should not occur.
-    if (encodedData[i] == 0xF7) {
-      jassert(true);
-      break;
-    }
-    // Merge the lower 7 bits from each encoded byte into the decoded bytes
-    decodedData[i - 1] |= encodedData[i] & 0x7F;
-  }
-}
-
 
 void FluidSynthSynth::handleSysex(MidiMessage& message) {
   auto sysexData = message.getSysExData();
@@ -365,40 +327,48 @@ void FluidSynthSynth::handleSysex(MidiMessage& message) {
     return;
   }
   switch (sysexCommand) {
-    case 0x10: {  // SF2 send start {
-      int bytesRead = 0;
-      incomingSF2Size = read6BitVariableLengthQuantity(sysexData+2, sysexDataSize-2, bytesRead);
-      incomingSF2File.reset();
-      break;
-    }
-    case 0x11: {
-      if (incomingSF2Size == 0) {
-        break;
-      }
-      auto destBuf = new uint8_t[static_cast<unsigned long>(sysexDataSize + 8)];
-      int inOffset = 2;     // The first two sysex bytes are manufacturer ID and command, so skip past them
-      int outOffset = 0;
-      while (inOffset < sysexDataSize) {
-        read7BitChunk(sysexData+inOffset, destBuf+outOffset);
-        inOffset += 8;
-        outOffset += 7;
-      }
-      incomingSF2Size -= outOffset;
-      if (incomingSF2Size <= 0) {
-        // shave off any extraneous bytes that weren't read
-        outOffset += incomingSF2Size;
-        incomingSF2Size = 0;
-      }
-      incomingSF2File.append(destBuf, static_cast<size_t>(outOffset));
-      // We should probably load the SF2 if incomingSF2Size == 0
-
-      if (incomingSF2Size == 0) {
-        unloadAndLoadFontFromMemory(incomingSF2File.getData(), incomingSF2File.getSize());
-      }
-
-      delete[] destBuf;
-      break;
-    }
+    // case 0x10: {  // SF2 send start {
+    //   if (sysexData[2] != 0x00) {
+    //     DBG("FluidSynthSynth received send File start command for wrong file type: " + sysexData[2]);
+    //     break;
+    //   }
+    //   int bytesRead = 0;
+    //   incomingSF2Size = read6BitVariableLengthQuantity(sysexData+3, sysexDataSize-3, bytesRead);
+    //   incomingSF2File.reset();
+    //   break;
+    // }
+    // case 0x11: {
+    //   if (sysexData[2] != 0x00) {
+    //     DBG("FluidSynthSynth received send File data command for wrong file type: " + sysexData[2]);
+    //     break;
+    //   }
+    //   if (incomingSF2Size == 0) {
+    //     break;
+    //   }
+    //   auto destBuf = new uint8_t[static_cast<unsigned long>(sysexDataSize + 8)];
+    //   int inOffset = 3;     // The first three sysex bytes are manufacturer ID and command, and file type, so skip past them
+    //   int outOffset = 0;
+    //   while (inOffset < sysexDataSize) {
+    //     read7BitChunk(sysexData+inOffset, destBuf+outOffset);
+    //     inOffset += 8;
+    //     outOffset += 7;
+    //   }
+    //   incomingSF2Size -= outOffset;
+    //   if (incomingSF2Size <= 0) {
+    //     // shave off any extraneous bytes that weren't read
+    //     outOffset += incomingSF2Size;
+    //     incomingSF2Size = 0;
+    //   }
+    //   incomingSF2File.append(destBuf, static_cast<size_t>(outOffset));
+    //   // We should probably load the SF2 if incomingSF2Size == 0
+    //
+    //   if (incomingSF2Size == 0) {
+    //     unloadAndLoadFontFromMemory(incomingSF2File.getData(), incomingSF2File.getSize());
+    //   }
+    //
+    //   delete[] destBuf;
+    //   break;
+    // }
     case 0x7F:
       fluid_synth_system_reset(synth.get());
       break;

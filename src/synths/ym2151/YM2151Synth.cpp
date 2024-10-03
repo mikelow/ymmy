@@ -87,6 +87,10 @@ const ValueTree YM2151Synth::getInitialChildValueTree() {
     };
 }
 
+void YM2151Synth::receiveFile(juce::MemoryBlock&, SynthFileType fileType) {
+
+}
+
 void YM2151Synth::processMidiMessage(MidiMessage& m) {
   auto rawData = m.getRawData();
   if (rawData[0] >= 0xF0) {

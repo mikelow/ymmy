@@ -47,6 +47,7 @@ AudioProcessorValueTreeState::ParameterLayout YmmyProcessor::createParameterLayo
   return layout;
 }
 
+
 // returns true if sysex was handled, or false if it was ignored
 bool YmmyProcessor::handleSysex(
   MidiMessage& message,
@@ -84,16 +85,76 @@ bool YmmyProcessor::handleSysex(
   }
 
   switch (opcode) {
-    case 0x10:
-    case 0x11:
+    case 0x10: {  // SF2 send start {
+      if (sysexData[2] != 0x00) {
+        DBG("FluidSynthSynth received send File start command for wrong file type: " + sysexData[2]);
+        break;
+      }
+      int bytesRead = 0;
+      incomingFileSize = read6BitVariableLengthQuantity(sysexData+3, sysexDataSize-3, bytesRead);
+      incomingFile.reset();
+      break;
+    }
+    case 0x11: {
+      if (incomingFileSize == 0) {
+        break;
+      }
+      auto destBuf = new uint8_t[static_cast<unsigned long>(sysexDataSize + 8)];
+      int inOffset = 3;     // The first three sysex bytes are manufacturer ID and command, and file type, so skip past them
+      int outOffset = 0;
+      while (inOffset < sysexDataSize) {
+        read7BitChunk(sysexData+inOffset, destBuf+outOffset);
+        inOffset += 8;
+        outOffset += 7;
+      }
+      incomingFileSize -= outOffset;
+      if (incomingFileSize <= 0) {
+        // shave off any extraneous bytes that weren't read
+        outOffset += incomingFileSize;
+        incomingFileSize = 0;
+      }
+      incomingFile.append(destBuf, static_cast<size_t>(outOffset));
+      // We should probably load the SF2 if incomingSF2Size == 0
+
+      if (incomingFileSize > 0)
+        break;
+
+      SynthFileType fileType = static_cast<SynthFileType>(sysexData[2]);
+      SynthType synthType = fileTypeToSynthType(fileType);
+      if (auto synth = synthTypeToSynth(synthType)) {
+        synth->receiveFile(incomingFile, fileType);
+      }
+
+      delete[] destBuf;
+      incomingFile.reset();
+      break;
+    }
+
+
+    // case 0x10:
+    // case 0x11: {
+    //   // For send file opcodes, we determine the destination synth using the file type byte
+    //   SynthFileType fileType = static_cast<SynthFileType>(sysexData[2]);
+    //   switch (fileType) {
+    //     case SoundFont2:
+    //       if (auto fluidSynth = synthTypeToSynth(FluidSynth)) {
+    //         synthMidiBuffers[fluidSynth].addEvent(message, samplePosition);
+    //       }
+    //       break;
+    //     case YM2151_OPM:
+    //       if (auto ym2151Synth = synthTypeToSynth(YM2151)) {
+    //         synthMidiBuffers[ym2151Synth].addEvent(message, samplePosition);
+    //       }
+    //       break;
+    //   }
+    //   break;
+    // }
     case 0x7F: {
       if (auto fluidSynth = synthTypeToSynth(FluidSynth)) {
         synthMidiBuffers[fluidSynth].addEvent(message, samplePosition);
       }
       break;
     }
-    case 0x12:
-      break;
     // assign synth to channel/group
     case 0x7E: {
       uint8_t chan = sysexData[2];
