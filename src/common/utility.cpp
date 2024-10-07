@@ -50,6 +50,6 @@ void read7BitChunk(const uint8_t* encodedData, uint8_t* decodedData) {
 SynthType fileTypeToSynthType(SynthFileType fileType) {
   switch (fileType) {
     case SynthFileType::SoundFont2: return SynthType::FluidSynth;
-    // case SynthFileType::YM2
+    case SynthFileType::YM2151_OPM: return SynthType::YM2151;
   }
 }

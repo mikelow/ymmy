@@ -7,6 +7,10 @@
 
 class YmmyProcessor;
 
+struct YM2151MidiChannelState {
+  uint8_t volume;
+};
+
 class YM2151Synth: public Synth,
                     public ValueTree::Listener,
                     public AudioProcessorValueTreeState::Listener,
@@ -48,6 +52,7 @@ public:
   void refreshBanks(std::vector<OPMPatch>& patches);
 
 private:
+  void handleSysex(MidiMessage& message);
   void processMidiMessage(MidiMessage& m);
   OPMPatch loadPresetFromVST(int bankNum, int presetNum);
 
@@ -55,6 +60,8 @@ private:
   YmmyProcessor* processor;
   LagrangeInterpolator resamplers[2];
   std::unique_ptr<AudioBuffer<float>> nativeBuffer;
+
+  YM2151MidiChannelState midiChannelState[8] = {};
 
   static const StringArray programChangeParams;
 

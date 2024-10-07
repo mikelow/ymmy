@@ -87,36 +87,71 @@ const ValueTree YM2151Synth::getInitialChildValueTree() {
     };
 }
 
-void YM2151Synth::receiveFile(juce::MemoryBlock&, SynthFileType fileType) {
+void YM2151Synth::receiveFile(juce::MemoryBlock& data, SynthFileType fileType) {
+  if (fileType != SynthFileType::YM2151_OPM)
+    return;
 
+  auto patches = OPMFileLoader::parseOpmString(data.toString().toStdString());
+  refreshBanks(patches);
+}
+
+void YM2151Synth::handleSysex(MidiMessage& message) {
+  auto sysexData = message.getSysExData();
+  auto sysexDataSize = message.getSysExDataSize();
+
+  if (sysexData[0] != 0x7D) {
+    return;
+  }
+  uint8_t sysexCommand = sysexData[1];
+  if (sysexCommand >= 0 && sysexCommand < 16) {
+    channelGroup = static_cast<int>(sysexData[1]);
+    auto wrappedMsg = juce::MidiMessage(sysexData + 2, message.getSysExDataSize() - 2, 0);
+    processMidiMessage(wrappedMsg);
+    return;
+  }
+  switch (sysexCommand) {
+    case 0x7F:
+      // fluid_synth_system_reset(synth.get());
+        break;
+    default:
+      break;
+  }
 }
 
 void YM2151Synth::processMidiMessage(MidiMessage& m) {
   auto rawData = m.getRawData();
-  if (rawData[0] >= 0xF0) {
+  if (rawData[0] == 0xF0) {
+    handleSysex(m);
     return;
   }
+
   const uint8_t eventNibble = rawData[0] & 0xf0;
   int channelGroupOffset = channelGroup * 16;
+  int channel = (m.getChannel() - 1 + channelGroupOffset) % 8;
 
   switch (eventNibble) {
     case NOTE_OFF:
-      for (int i = 0; i < 8; ++i) {
-        interface.write(8, i);
-      }
+      // for (int i = 0; i < 8; ++i) {
+        interface.write(8, channel);
+      // }
       break;
     case NOTE_ON: {
-//      std::mt19937 engine{std::random_device{}()};
-//      std::uniform_int_distribution<uint8_t> dist(0, 127);
+        uint8_t velocity = m.getVelocity();
+        // Set volume of note
+        uint8_t channelVolume = midiChannelState[channel].volume;
 
-//      interface.write(0x0F, 0x00);
+        uint8_t finalVolume = (static_cast<uint16_t>(velocity) * channelVolume) >> 7;
 
-//      for (int i = 0; i < 8; ++i) {
-//        uint8_t randomByte = dist(engine);
-//        interface.write(0x20 + i, randomByte | 0xC0);
-//      }
+        // finalVolume = 0x7F - finalVolume;
+        finalVolume /= 2;
 
-      for (int i = 0; i < 1; ++i) {
+
+
+        for (int i = 0; i < 4; i++) {
+          interface.write(0x60 + (i*8) + channel, finalVolume);
+        }
+
+      // for (int i = 0; i < 1; ++i) {
         int absNote = m.getNoteNumber();
         // temporary adjustment to get notes aligned with 3.58mhz freq
         absNote -= 13;
@@ -126,53 +161,26 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
         const int noteTable[12] = {0,1,2,4,5,6,8,9,10,12,13,14};
 
         uint8_t val = ((octave & 7) << 4) | noteTable[note];
-        printf("OCT: %d    NOTE: %d  val: %X \n", octave, note, val);
-        interface.write(0x28 + i, val);
-      }
-//
-//      for (int i = 0; i < 8; ++i) {
-//        interface.write(0x30 + i, 0);
-//      }
-//
-//      for (int i = 0; i < 8 * 4; ++i) {
-//        interface.write(0x40 + i, 0);
-//      }
-//
-//      for (int i = 0; i < 8 * 4; ++i) {
-//        uint8_t randomByte = dist(engine);
-//        interface.write(0x60 + i, 0x10);
-////        interface.write(0x60 + i, 0x7f);
-////        interface.write(0x60 + i, randomByte);
-//      }
-//      for (int i = 0; i < 8 * 4; ++i) {
-//        uint8_t randomByte = dist(engine);
-//        interface.write(0x80 + i, 0x1F);
-//        interface.write(0x80 + i, 0x1F);
-//      }
-//      for (int i = 0; i < 8 * 4; ++i) {
-//        uint8_t randomByte = dist(engine);
-//        interface.write(0xA0 + i, 0xDF);
-//      }
-//      for (int i = 0; i < 8 * 4; ++i) {
-//        uint8_t randomByte = dist(engine);
-//        interface.write(0xC0 + i, 0x0);
-//      }
-//      for (int i = 0; i < 8 * 4; ++i) {
-//        uint8_t randomByte = dist(engine);
-//        interface.write(0xE0 + i, 0x3F);
-//      }
-
-      for (int i = 0; i < 1; ++i) {
-        interface.write(8, 0x78 + i);
-      }
+        printf("OCT: %d    NOTE: %d  val: %X  vol: %X \n", octave, note, val, finalVolume);
+        // Send octave / note
+        interface.write(0x28 + channel, val);
+        // Send note on
+        interface.write(8, 0x78 + channel);
       break;
     }
     case KEY_PRESSURE:
       break;
     case CONTROL_CHANGE:
+      if (m.getControllerNumber() == VOLUME_MSB) {
+        int value = m.getControllerValue();
+        midiChannelState[channel].volume = value;
+      }
       break;
-    case PROGRAM_CHANGE:
+    case PROGRAM_CHANGE: {
+      auto patch = loadPresetFromVST(0, m.getProgramChangeNumber());
+      interface.changePreset(patch, channel);
       break;
+    }
     case CHANNEL_PRESSURE:
       break;
     case PITCH_BEND:
@@ -370,14 +378,10 @@ void YM2151Synth::reset() {
 }
 
 void YM2151Synth::refreshBanks(std::vector<OPMPatch>& patches) {
-  ValueTree banks = ValueTree("ym2151.banks");
+  ValueTree banks = vts.state.getOrCreateChildWithName("ym2151.banks", nullptr); // Access the existing tree or create it
 
-//  fluid_sfont_t* sfont = fluid_synth_get_sfont_by_id(synth.get(), sfont_id);
-//  if (!sfont) {
-//    return;
-//  }
+  banks.removeAllChildren(nullptr); // Clear any previous banks if needed
 
-//  int greatestEncounteredBank = -1;
   ValueTree bank;
 
   bank = { "bank", { { "num", 0 }}};
@@ -458,9 +462,6 @@ void YM2151Synth::refreshBanks(std::vector<OPMPatch>& patches) {
 //  if (greatestEncounteredBank > -1) {
 //    banks.appendChild(bank, nullptr);
 //  }
-  vts.state.getChildWithName("ym2151.banks").copyPropertiesAndChildrenFrom(banks, nullptr);
-  vts.state.getChildWithName("ym2151.banks").sendPropertyChangeMessage("synthetic");
-
 #if JUCE_DEBUG
 //    unique_ptr<XmlElement> xml{valueTreeState.state.createXml()};
 //    Logger::outputDebugString(xml->createDocument("",false,false));

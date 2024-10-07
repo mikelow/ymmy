@@ -86,10 +86,6 @@ bool YmmyProcessor::handleSysex(
 
   switch (opcode) {
     case 0x10: {  // SF2 send start {
-      if (sysexData[2] != 0x00) {
-        DBG("FluidSynthSynth received send File start command for wrong file type: " + sysexData[2]);
-        break;
-      }
       int bytesRead = 0;
       incomingFileSize = read6BitVariableLengthQuantity(sysexData+3, sysexDataSize-3, bytesRead);
       incomingFile.reset();

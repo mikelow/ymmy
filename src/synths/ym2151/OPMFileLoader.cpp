@@ -73,16 +73,25 @@ void OPMFileLoader::parseLFOParams(const std::string& line, OPMLFOParams& lfo) {
 
 std::vector<OPMPatch> OPMFileLoader::parseOpmFile(const std::string& fileName) {
   std::ifstream file(fileName);
+  if (!file.is_open()) {
+    std::cerr << "Failed to open file: " << fileName << std::endl;
+    return {};  // Return empty vector on failure
+  }
+
+  return parseOpmStream(file);
+}
+
+std::vector<OPMPatch> OPMFileLoader::parseOpmString(const std::string& content) {
+  std::istringstream stream(content);
+  return parseOpmStream(stream);
+}
+
+std::vector<OPMPatch> OPMFileLoader::parseOpmStream(std::istream& inputStream) {
   std::string line;
   std::vector<OPMPatch> patches;
   OPMPatch currentPatch;
 
-  if (!file.is_open()) {
-    std::cerr << "Failed to open file: " << fileName << std::endl;
-    return patches;  // Return empty vector on failure
-  }
-
-  while (getline(file, line)) {
+  while (getline(inputStream, line)) {
     // Skip comments and empty lines
     if (line.empty() || line[0] == '/')
       continue;
