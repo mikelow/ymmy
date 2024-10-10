@@ -7,21 +7,10 @@
 constexpr int CPS1_YM2151_CLOCK_RATE = 3579545;
 
 namespace YM2151SynthParam {
-//  const juce::String FILTER_RESONANCE = "fs.filterResonance";
-//  const juce::String FILTER_CUT_OFF = "fs.filterCutOff";
-//  const juce::String ATTACK_RATE = "fs.attackRate";
-//  const juce::String HOLD = "fs.hold";
-//  const juce::String DECAY_RATE = "fs.decayRate";
-//  const juce::String RELEASE_RATE = "fs.releaseRate";
 
   IntParameter parameters[] = {
       {"ym2151.bank", "selected bank", 0, 128, 0},
       {"ym2151.preset", "selected preset", 0, 127, 0},
-//      {FluidSynthParam::ATTACK_RATE, "Attack Time", -12000, 8000, -12000},
-//      {FluidSynthParam::HOLD, "Hold Time", -12000, 5000, -12000},
-//      {FluidSynthParam::DECAY_RATE, "Decay Time", -12000, 8000, -12000},
-//      {FluidSynthParam::SUSTAIN_LEVEL, "Sustain Level", 0, 1440, 0},
-//      {FluidSynthParam::RELEASE_RATE, "Release Rate", -12000, 8000, -12000},
   };
 
   static std::map<juce::String, IntParameter> createParamIdMap() {
@@ -95,6 +84,15 @@ void YM2151Synth::receiveFile(juce::MemoryBlock& data, SynthFileType fileType) {
   refreshBanks(patches);
 }
 
+void YM2151Synth::changePreset(OPMPatch& patch, int channel) {
+  midiChannelState[channel].CON = patch.channelParams.CON;
+  midiChannelState[channel].SLOT_MASK = patch.channelParams.SLOT_MASK;
+  for (int i = 0; i < 4; ++i) {
+    midiChannelState[channel].TL[i] = patch.opParams[i].TL;
+  }
+  interface.changePreset(patch, channel);
+}
+
 void YM2151Synth::handleSysex(MidiMessage& message) {
   auto sysexData = message.getSysExData();
   auto sysexDataSize = message.getSysExDataSize();
@@ -131,41 +129,46 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 
   switch (eventNibble) {
     case NOTE_OFF:
-      // for (int i = 0; i < 8; ++i) {
-        interface.write(8, channel);
-      // }
+      interface.write(8, channel);
       break;
     case NOTE_ON: {
-        uint8_t velocity = m.getVelocity();
-        // Set volume of note
-        uint8_t channelVolume = midiChannelState[channel].volume;
+      uint8_t velocity = m.getVelocity();
+      // Set volume of note
+      uint8_t channelVolume = midiChannelState[channel].volume;
+      uint8_t channelVolumeAtten = 0x7F - channelVolume;
+      // uint8_t masterVolumeAtten = 0x7F - 0x7C;
+      // uint8_t masterPlusChanAtten = masterVolumeAtten + channelVolumeAtten;
 
-        uint8_t finalVolume = (static_cast<uint16_t>(velocity) * channelVolume) >> 7;
+      // uint8_t finalVolume = (static_cast<uint16_t>(velocity) * channelVolume) >> 7;
+      uint8_t finalAttenuation;
 
-        // finalVolume = 0x7F - finalVolume;
-        finalVolume /= 2;
-
-
-
-        for (int i = 0; i < 4; i++) {
-          interface.write(0x60 + (i*8) + channel, finalVolume);
+      uint8_t CON_limits[4] = { 7, 5, 4, 0 };
+      for (int i = 0; i < 4; i++) {
+        auto conLimit = CON_limits[i];
+        // uint8_t finalAttenuation;
+        if (midiChannelState[channel].CON < conLimit) {
+          finalAttenuation = midiChannelState[channel].TL[i];
+        } else {
+          finalAttenuation = midiChannelState[channel].TL[i] + channelVolumeAtten;
         }
+        interface.write(0x60 + (i*8) + channel, finalAttenuation);
+      }
 
       // for (int i = 0; i < 1; ++i) {
-        int absNote = m.getNoteNumber();
-        // temporary adjustment to get notes aligned with 3.58mhz freq
-        absNote -= 13;
-        int octave = absNote / 12;
-        int note = absNote % 12;
+      int absNote = m.getNoteNumber();
+      // temporary adjustment to get notes aligned with 3.58mhz freq
+      absNote -= 13;
+      int octave = absNote / 12;
+      int note = absNote % 12;
 
-        const int noteTable[12] = {0,1,2,4,5,6,8,9,10,12,13,14};
+      const int noteTable[12] = {0,1,2,4,5,6,8,9,10,12,13,14};
 
-        uint8_t val = ((octave & 7) << 4) | noteTable[note];
-        printf("OCT: %d    NOTE: %d  val: %X  vol: %X \n", octave, note, val, finalVolume);
-        // Send octave / note
-        interface.write(0x28 + channel, val);
-        // Send note on
-        interface.write(8, 0x78 + channel);
+      uint8_t val = ((octave & 7) << 4) | noteTable[note];
+      printf("OCT: %d    NOTE: %d  val: %X  atten: %X \n", octave, note, val, finalAttenuation);
+      // Send octave / note
+      interface.write(0x28 + channel, val);
+      // Send note on
+      interface.write(8, midiChannelState[channel].SLOT_MASK | channel);
       break;
     }
     case KEY_PRESSURE:
@@ -178,7 +181,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       break;
     case PROGRAM_CHANGE: {
       auto patch = loadPresetFromVST(0, m.getProgramChangeNumber());
-      interface.changePreset(patch, channel);
+      changePreset(patch, channel);
       break;
     }
     case CHANNEL_PRESSURE:
@@ -237,6 +240,7 @@ void YM2151Synth::prepareToPlay(double sampleRate, int samplesPerBlock) {
   uint32_t numSamples = interface.sample_rate(CPS1_YM2151_CLOCK_RATE);
 //  uint32_t numSamples = interface.sample_rate(4000000);
   nativeBuffer = std::make_unique<AudioBuffer<float>>(2, numSamples);
+  reset();
 }
 
 int YM2151Synth::getNumPrograms() {
@@ -272,13 +276,7 @@ void YM2151Synth::parameterChanged(const String& parameterID, float newValue) {
     }
     auto patch = loadPresetFromVST(bank, preset);
     // TODO: presumably translate the bank/channel to the YM2151 channel
-    interface.changePreset(patch, selectedChannel);
-//    fluid_synth_program_select(
-//        synth.get(),
-//        selectedChannel + (selectedGroup*16),
-//        sfont_id,
-//        static_cast<unsigned int>(bankOffset + bank),
-//        static_cast<unsigned int>(preset));
+    changePreset(patch, selectedChannel);
   }
 }
 
@@ -375,6 +373,10 @@ void YM2151Synth::valueTreeRedirected (ValueTree& treeWhichHasBeenChanged) {
 }
 
 void YM2151Synth::reset() {
+  interface.resetGlobal();
+  for (int i = 0; i < 8; i++) {
+    interface.resetChannel(i);
+  }
 }
 
 void YM2151Synth::refreshBanks(std::vector<OPMPatch>& patches) {
@@ -427,41 +429,9 @@ void YM2151Synth::refreshBanks(std::vector<OPMPatch>& patches) {
          }, {},
       }, nullptr);
     }
-//    preset.appendChild({ "LFO", {
-//      { "LFRQ", patch.lfoParams.LFRQ },
-//      { "AMD", patch.lfoParams.AMD },
-//      { "PMD", patch.lfoParams.PMD },
-//      { "WF", patch.lfoParams.WF },
-//      { "NFRQ", patch.lfoParams.NFRQ },
-//    }, {} }, nullptr);
-//    bank.appendChild({ "preset", {
-//      { "num", patch.number },
-//      { "name", String(patch.name) },
-//    }, {} }, nullptr);
     bank.appendChild(preset, nullptr);
   }
   banks.appendChild(bank, nullptr);
-
-//  fluid_sfont_iteration_start(sfont);
-//  for(fluid_preset_t* preset = fluid_sfont_iteration_next(sfont);
-//       preset != nullptr;
-//       preset = fluid_sfont_iteration_next(sfont)) {
-//    int bankNum = fluid_preset_get_banknum(preset);
-//    if (bankNum > greatestEncounteredBank) {
-//      if (greatestEncounteredBank > -1) {
-//        banks.appendChild(bank, nullptr);
-//      }
-//      bank = { "fs.bank", { { "num", bankNum } } };
-//      greatestEncounteredBank = bankNum;
-//    }
-//    bank.appendChild({ "fs.preset", {
-//                                       { "num", fluid_preset_get_num(preset) },
-//                                       { "name", String(fluid_preset_get_name(preset)) }
-//                                   }, {} }, nullptr);
-//  }
-//  if (greatestEncounteredBank > -1) {
-//    banks.appendChild(bank, nullptr);
-//  }
 #if JUCE_DEBUG
 //    unique_ptr<XmlElement> xml{valueTreeState.state.createXml()};
 //    Logger::outputDebugString(xml->createDocument("",false,false));

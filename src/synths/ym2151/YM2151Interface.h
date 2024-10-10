@@ -5,9 +5,6 @@
 
 class YM2151Interface : public ymfm::ymfm_interface {
 public:
-//  YM2151Interface();
-//  ~YM2151Interface();
-
   YM2151Interface():
         m_chip(*this),
         m_timers{0, 0},
@@ -62,34 +59,61 @@ public:
   }
 
   void write(uint8_t addr, uint8_t value) {
+    printf("addr: 0x%X   %X\n", addr, value);
     if (ymfm_is_busy()) {
       expire_engine_timer();
     }
     m_chip.write_address(addr);
     m_chip.write_data(value);
-    expire_engine_timer();
+    // expire_engine_timer();
   }
 
-  void changePreset(OPMPatch patch, int chan) {
+  void resetGlobal() {
+    for (uint8_t addr = 0xF; addr < 0x20; ++addr) {
+      write(addr, 0);
+    }
+  }
+
+  void resetChannel(uint8_t channel) {
+    uint8_t resetParams[20] = {
+      0x7F, 0x7F, 0x7F, 0x7F, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0xFF, 0xFF, 0xFF, 0xFF
+    };
+    channel &= 0x7;
+    uint8_t addr = channel + 0x60;
+    for (const uint8_t param : resetParams) {
+      write(addr,param);
+      addr += 8;
+    }
+    // for (addr = 0x20; addr < 0x60; ++addr) {
+    for (addr = 0x30; addr < 0x38; ++addr) {
+      write(addr, 0);
+    }
+    write(8, channel | 0x78);
+    write(8, channel | 0);
+  }
+
+  void changePreset(OPMPatch& patch, int chan) {
     write(0x0F, (patch.channelParams.NE << 7) | (patch.lfoParams.NFRQ));
-    write(0x18, patch.lfoParams.LFRQ);
-    write(0x19, patch.lfoParams.PMD | 0x80);
-    write(0x19, patch.lfoParams.AMD & 0x7F);
-    write(0x1B, patch.lfoParams.WF);
-    write(0x20 + chan, patch.channelParams.PAN | (patch.channelParams.FL << 3) | patch.channelParams.CON);
+    if (patch.lfoParams.LFRQ) {
+      write(0x18, patch.lfoParams.LFRQ);
+      write(0x19, patch.lfoParams.PMD | 0x80);
+      write(0x19, patch.lfoParams.AMD & 0x7F);
+      write(0x1B, patch.lfoParams.WF);
+    }
     write(0x38 + chan, (patch.channelParams.PMS << 4) | patch.channelParams.AMS);
+    write(0x20 + chan, patch.channelParams.PAN | (patch.channelParams.FL << 3) | patch.channelParams.CON);
 
     for (size_t i = 0; i < sizeof(patch.opParams) / sizeof(patch.opParams[0]); i++) {
       OPMOpParams& op = patch.opParams[i];
       write(0x40 + (i*8) + chan, (op.DT1 << 4) | op.MUL);
-      write(0x60 + (i*8) + chan, op.TL);
+      // write(0x60 + (i*8) + chan, op.TL);
       write(0x80 + (i*8) + chan, (op.KS << 6) | op.AR);
       write(0xA0 + (i*8) + chan, op.AMS_EN | op.D1R);
       write(0xC0 + (i*8) + chan, (op.DT2 << 6) | op.D2R);
       write(0xE0 + (i*8) + chan, (op.D1L << 4) | op.RR);
     }
-
-    // TODO: Need to consider how to handle SLOT_MASK
   }
 
 //  void generate(int16_t* output, uint32_t numsamples) {
@@ -127,23 +151,6 @@ public:
   uint32_t sample_rate(uint32_t input_clock) const {
     return m_chip.sample_rate(input_clock);
   }
-
-  // Function to convert an array of 32-bit unsigned ints to 32-bit floats
-//  std::vector<float> convertToFloat(int numSamples, const int32_t input[], float output[]) {
-////    std::vector<float> output;
-////    output.reserve(input.size());
-//
-//    const float maxInt = static_cast<float>(UINT32_MAX); // Maximum value for a 32-bit unsigned int
-//
-//    for (auto sample : input) {
-//      // Normalize the unsigned integer and then convert it to a float in the range -1.0 to 1.0
-//      float normalizedSample = (static_cast<float>(sample) / maxInt) * 2.0f - 1.0f;
-//      output.push_back(normalizedSample);
-//    }
-//
-//    return output;
-//  }
-
 
   uint8_t read_status() {
     return m_chip.read_status();

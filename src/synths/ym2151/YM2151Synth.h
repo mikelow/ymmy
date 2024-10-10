@@ -9,6 +9,9 @@ class YmmyProcessor;
 
 struct YM2151MidiChannelState {
   uint8_t volume;
+  uint8_t CON;
+  uint8_t SLOT_MASK;
+  uint8_t TL[4];
 };
 
 class YM2151Synth: public Synth,
@@ -26,6 +29,7 @@ public:
 
   SynthType getSynthType() override { return YM2151; }
   void receiveFile(juce::MemoryBlock&, SynthFileType fileType) override;
+  void changePreset(OPMPatch& patch, int channel);
   void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
   void prepareToPlay (double sampleRate, int samplesPerBlock) override;
   int getNumPrograms() override;

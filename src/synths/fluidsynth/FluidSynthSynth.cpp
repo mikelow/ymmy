@@ -110,7 +110,7 @@ FluidSynthSynth::FluidSynthSynth(AudioProcessorValueTreeState& valueTreeState)
     : Synth(valueTreeState), settings{nullptr, nullptr}, synth{nullptr, nullptr},
       channelGroup(0),
       currentSampleRate(44100), sfont_id(-1) {
-  initialize();
+  // initialize();
 
   vts.state.addListener(this);
 
@@ -132,131 +132,6 @@ FluidSynthSynth::~FluidSynthSynth() {
   vts.removeParameterListener("selectedGroup", this);
   vts.removeParameterListener("selectedChannel", this);
   vts.state.removeListener(this);
-}
-
-void FluidSynthSynth::initialize() {
-  // deactivate all audio drivers in fluidsynth to avoid FL Studio deadlock when initialising CoreAudio
-  // after all: we only use fluidsynth to render blocks of audio. it doesn't output to audio driver.
-  const char *DRV[] {NULL};
-  fluid_audio_driver_register(DRV);
-
-  settings = { new_fluid_settings(), delete_fluid_settings };
-
-  //    fluid_settings_setint(this->settings.get(), "synth.reverb.active", 1);
-  //    fluid_settings_setstr(this->settings.get(), "synth.chorus.active", "no");
-  fluid_settings_setstr(this->settings.get(), "synth.midi-bank-select", "gs");
-  fluid_settings_setint(this->settings.get(), "synth.midi-channels", NUM_CHANNELS);
-
-  // https://sourceforge.net/p/fluidsynth/wiki/FluidSettings/
-#if JUCE_DEBUG
-  fluid_settings_setint(settings.get(), "synth.verbose", 1);
-#endif
-//  fluid_settings_setnum(settings.get(), "synth.sample-rate", currentSampleRate);
-
-  synth = { new_fluid_synth(settings.get()), delete_fluid_synth };
-
-  fluid_synth_set_reverb_on(synth.get(), true);
-  fluid_synth_set_reverb(synth.get(), 0.7, 0.4, 0.5, 0.5);
-  // fluid_synth_set_reverb(synth.get(), 0.8, 0.3, 0.8, 0.8);
-
-  fluid_sfloader_t *my_sfloader = new_fluid_defsfloader(settings.get());
-  fluid_sfloader_set_callbacks(my_sfloader, mem_open, mem_read, mem_seek, mem_tell, mem_close);
-  fluid_synth_add_sfloader(synth.get(), my_sfloader);
-
-  fluid_synth_set_sample_rate(synth.get(), currentSampleRate);
-
-  reset();
-
-  //    fluid_synth_reverb_on(synth.get(), -1, true);
-  //    fluid_synth_set_reverb(synth.get(), 1.0, 0.3, 50, 1.0);
-
-  // note: fluid_chan.c#fluid_channel_init_ctrl()
-  // > Just like panning, a value of 64 indicates no change for sound ctrls
-  // --
-  // so, advice is to leave everything at 64
-  // and yet, I'm finding that default modulators start at MIN,
-  // i.e. we are forced to start at 0 and climb from there
-  // --
-  // let's zero out every audio param that we manage
-  for (const auto &[genId, param]: generatorToParam) {
-      setControllerValue(static_cast<int>(genId), 0);
-  }
-    fluid_mod_t *my_mod = new_fluid_mod();
-    fluid_mod_set_source2(my_mod, FLUID_MOD_NONE, 0);
-
-    // It is possible to set generator values (which includes the volume envelope ADSR parameters) by using
-    // nrpn controller messages. The specific on how this is done are explained in the SF 2.01 spec in section 9.6.
-    // Generally, the process is to pass the following controller events:
-    //   NPRN_SELECT_MSB 120
-    //   NRPN_SELECT_LSB <generator_num> (ex: 34 - GEN_VOLENVATTACK)
-    //   DATA_ENTRY_LSB <7 bit lsb>
-    //   DATA_ENTRY_MSB <7 bit msb>
-    // The 14 bit value should conform to the generator value range in section 8.1.3.
-    // There are two complications we must handle:
-    //   * First, per section 9.6.3, the value might need to be scaled down if it is for a value range that
-    //     exceeds 14bits. This "nrpn-scale" value is defined for each generator in the
-    //     fluid_gen_info[] array in fluid_gen.c.
-    //   * Second, also per section 9.6.3, the zero offset for the 14 bit values is 0x2000. Therefore, we need to
-    //     add 8192 to the final value.
-    // For example, GEN_VOLENVATTACK has a range defined in 8.1.3 as -12000 to 8000 timecents. Since this range
-    // exceeds 14bits, we see it has a nrpn_scale of 2. Therefore, the value range for a nrpn event will be
-    // -6000 to 4000. Additionally, we must add 8192, so the actual value range we must pass is: 2192 to 12192.
-
-    // The SF 2.01 spec states that both modulator and nrpn values should be additive to generator values (9.6.3),
-    // meaning that the volume envelope defined in the SF file will not be overridden but added to. For our purposes,
-    // this is breaking. There are VGM sequence formats where sequence events can override the ADSR envelope values
-    // entirely. Ymmy is therefore using a modified version of FluidSynth that will override the SF-defined generator
-    // values when nrpn events are received.
-
-    // The following modulator definitions are included (and commented out here) in case we consider allowing
-    // ADSR envelope control via semi-standard controller events (not just nrpn).
-
-//  {
-//    fluid_mod_set_source1(my_mod,
-//                          14, //SOUND_CTRL4,
-//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_BIPOLAR | FLUID_MOD_POSITIVE);
-//    fluid_mod_set_dest(my_mod, GEN_VOLENVATTACK);
-//    fluid_mod_set_amount(my_mod, 12000);
-//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-//  }
-//
-//  {
-//    fluid_mod_set_source1(my_mod,
-//                          15, //SOUND_CTRL9,
-//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_UNIPOLAR | FLUID_MOD_POSITIVE);
-//    fluid_mod_set_dest(my_mod, GEN_VOLENVHOLD);
-//    fluid_mod_set_amount(my_mod, 12000);
-//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-//  }
-//
-//  {
-//    fluid_mod_set_source1(my_mod,
-//                          16, //SOUND_CTRL6,
-//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_BIPOLAR | FLUID_MOD_POSITIVE);
-//    fluid_mod_set_dest(my_mod, GEN_VOLENVDECAY);
-//    fluid_mod_set_amount(my_mod, 12000);
-//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-//  }
-//
-//  {
-//    fluid_mod_set_source1(my_mod,
-//                          17, //SOUND_CTRL10,
-//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_UNIPOLAR | FLUID_MOD_POSITIVE);
-//    fluid_mod_set_dest(my_mod, GEN_VOLENVSUSTAIN);
-//    fluid_mod_set_amount(my_mod, 1440/*cB*/);
-//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-//  }
-//
-//  {
-//    fluid_mod_set_source1(my_mod,
-//                          18, //SOUND_CTRL3,
-//                          FLUID_MOD_CC | FLUID_MOD_LINEAR | FLUID_MOD_BIPOLAR | FLUID_MOD_POSITIVE);
-//    fluid_mod_set_dest(my_mod, GEN_VOLENVRELEASE);
-//    fluid_mod_set_amount(my_mod, 12000);
-//    fluid_synth_add_default_mod(synth.get(), my_mod, FLUID_SYNTH_OVERWRITE);
-//  }
-
-  delete_fluid_mod(my_mod);
 }
 
 std::unique_ptr<juce::AudioProcessorParameterGroup> FluidSynthSynth::createParameterGroup() {
@@ -467,20 +342,28 @@ void FluidSynthSynth::prepareToPlay(double sampleRate, int samplesPerBlock) {
 
   double sampleRateSetting;
   fluid_settings_getnum(settings.get(), "synth.sample-rate", &sampleRateSetting);
-  if (sampleRateSetting != sampleRate) {
-//    fluid_settings_setnum(settings.get(), "synth.sample-rate", currentSampleRate);
-//    delete_fluid_audio_driver(adriver);
-    // then delete the synth
-//    delete_fluid_synth(synth.get());
-    // update the sample-rate
-    fluid_settings_setnum(settings.get(), "synth.sample-rate", sampleRate);
-    // and re-create objects
-//    synth = new_fluid_synth(settings.get());
-    synth = { new_fluid_synth(settings.get()), delete_fluid_synth };
-//    adriver = new_fluid_audio_driver(settings, synth);
-  }
+  if (!synth.get() || sampleRateSetting != sampleRate) {
 
-//  fluidSynthModel.setSampleRate(static_cast<float>(sampleRate));
+    settings = { new_fluid_settings(), delete_fluid_settings };
+
+    fluid_settings_setnum(settings.get(), "synth.sample-rate", sampleRate);
+    fluid_settings_setstr(this->settings.get(), "synth.midi-bank-select", "gs");
+    fluid_settings_setint(this->settings.get(), "synth.midi-channels", NUM_CHANNELS);
+#if JUCE_DEBUG
+    fluid_settings_setint(settings.get(), "synth.verbose", 1);
+#endif
+
+    synth = { new_fluid_synth(settings.get()), delete_fluid_synth };
+
+    fluid_synth_set_reverb_on(synth.get(), true);
+    fluid_synth_set_reverb(synth.get(), 0.7, 0.4, 0.5, 0.5);
+
+    fluid_sfloader_t *my_sfloader = new_fluid_defsfloader(settings.get());
+    fluid_sfloader_set_callbacks(my_sfloader, mem_open, mem_read, mem_seek, mem_tell, mem_close);
+    fluid_synth_add_sfloader(synth.get(), my_sfloader);
+
+    reset();
+  }
 }
 
 int FluidSynthSynth::getNumPrograms() {
@@ -688,8 +571,6 @@ void FluidSynthSynth::loadFontFromMemory(void *sf, fluid_long_long_t fileSize) {
   char abused_filename[128];
   snprintf(abused_filename, 128, "&%p %" FLUID_PRIi64, sf, fileSize);
 
-  const char* testString = (char*)sf;
-
   sfont_id = fluid_synth_sfload(synth.get(), abused_filename, 1);
   // if -1 is returned, that indicates failure
   // refresh regardless of success, if only to clear the table
@@ -702,7 +583,11 @@ void FluidSynthSynth::reset() {
 
 
 void FluidSynthSynth::refreshBanks() {
-  ValueTree banks = ValueTree("banks");
+  // ValueTree banks = ValueTree("banks");
+  ValueTree banks = vts.state.getOrCreateChildWithName("banks", nullptr); // Access the existing tree or create it
+
+  banks.removeAllChildren(nullptr); // Clear any previous banks if needed
+
   if (sfont_id == -1) {
     return;
   }
@@ -727,9 +612,9 @@ void FluidSynthSynth::refreshBanks() {
       greatestEncounteredBank = bankNum;
     }
     bank.appendChild({ "fs.preset", {
-                                    { "num", fluid_preset_get_num(preset) },
-                                    { "name", String(fluid_preset_get_name(preset)) }
-                                }, {} }, nullptr);
+        { "num", fluid_preset_get_num(preset) },
+        { "name", String(fluid_preset_get_name(preset)) }
+    }, {} }, nullptr);
   }
   if (greatestEncounteredBank > -1) {
     banks.appendChild(bank, nullptr);
