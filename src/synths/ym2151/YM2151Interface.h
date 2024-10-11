@@ -97,10 +97,10 @@ public:
   void changePreset(OPMPatch& patch, int chan) {
     write(0x0F, (patch.channelParams.NE << 7) | (patch.lfoParams.NFRQ));
     if (patch.lfoParams.LFRQ) {
+      write(0x1B, patch.lfoParams.WF);
       write(0x18, patch.lfoParams.LFRQ);
       write(0x19, patch.lfoParams.PMD | 0x80);
       write(0x19, patch.lfoParams.AMD & 0x7F);
-      write(0x1B, patch.lfoParams.WF);
     }
     write(0x38 + chan, (patch.channelParams.PMS << 4) | patch.channelParams.AMS);
     write(0x20 + chan, patch.channelParams.PAN | (patch.channelParams.FL << 3) | patch.channelParams.CON);
