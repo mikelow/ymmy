@@ -42,19 +42,18 @@ void OPMFileLoader::parseChannelParams(const std::string& line, OPMChannelParams
 //  std::istringstream iss(line);
 //  iss >> ch.PAN >> ch.FL >> ch.CON >> ch.AMS >> ch.PMS >> ch.SLOT_MASK >> ch.NE;
 
-std::istringstream iss(line.substr(3)); // Skip the "LFO:" part
-if (tryParseUInt8(iss, ch.PAN) &&
-    tryParseUInt8(iss, ch.FL) &&
-    tryParseUInt8(iss, ch.CON) &&
-    tryParseUInt8(iss, ch.AMS) &&
-    tryParseUInt8(iss, ch.PMS) &&
-    tryParseUInt8(iss, ch.SLOT_MASK) &&
-    tryParseUInt8(iss, ch.NE)) {
-  // Successfully parsed all LFO parameters
-} else {
-  std::cerr << "Error parsing LFO parameters: " << line << std::endl;
-  // Handle the error appropriately
-}
+  std::istringstream iss(line.substr(3)); // Skip the "LFO:" part
+  if (tryParseUInt8(iss, ch.PAN) &&
+      tryParseUInt8(iss, ch.FL) &&
+      tryParseUInt8(iss, ch.CON) &&
+      tryParseUInt8(iss, ch.AMS) &&
+      tryParseUInt8(iss, ch.PMS) &&
+      tryParseUInt8(iss, ch.SLOT_MASK) &&
+      tryParseUInt8(iss, ch.NE)) {
+    // Successfully parsed all LFO parameters
+  } else {
+    std::cerr << "Error parsing LFO parameters: " << line << std::endl;
+  }
 }
 
 void OPMFileLoader::parseLFOParams(const std::string& line, OPMLFOParams& lfo) {
@@ -67,9 +66,22 @@ void OPMFileLoader::parseLFOParams(const std::string& line, OPMLFOParams& lfo) {
     // Successfully parsed all LFO parameters
   } else {
     std::cerr << "Error parsing LFO parameters: " << line << std::endl;
-    // Handle the error appropriately
   }
 }
+
+void OPMFileLoader::parseCPSParams(const std::string& line, OPMCPSParams* cps) {
+  std::istringstream iss(line.substr(4)); // Skip the "LFO:" part
+  for (int i = 0; i < 4; i++) {
+    if (tryParseUInt8(iss, cps[i].vol) &&
+        tryParseUInt8(iss, cps[i].vol_key_scale) &&
+        tryParseUInt8(iss, cps[i].extra_atten)) {
+      // Successfully parsed all LFO parameters
+    } else {
+      std::cerr << "Error parsing LFO parameters: " << line << std::endl;
+    }
+  }
+}
+
 
 std::vector<OPMPatch> OPMFileLoader::parseOpmFile(const std::string& fileName) {
   std::ifstream file(fileName);
@@ -125,6 +137,8 @@ std::vector<OPMPatch> OPMFileLoader::parseOpmStream(std::istream& inputStream) {
       parseOperatorParams(line, currentPatch.opParams[1]);
     } else if (substr == "C2:") {
       parseOperatorParams(line, currentPatch.opParams[3]);
+    } else if (substr == "CPS") {
+      parseCPSParams(line, currentPatch.cpsParams);
     }
   }
 
