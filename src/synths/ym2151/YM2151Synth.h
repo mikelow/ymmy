@@ -12,6 +12,7 @@ struct YM2151MidiChannelState {
   uint8_t CON;
   uint8_t SLOT_MASK;
   uint8_t TL[4];
+  int8_t KF;
   OPMCPSParams cpsParams[4];
 };
 

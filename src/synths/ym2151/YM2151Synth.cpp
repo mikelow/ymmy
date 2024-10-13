@@ -203,6 +203,9 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 
       // temporary adjustment to get notes aligned with 3.58mhz freq
       absNote -= 13;
+      if ((midiChannelState[channel].KF & 0x80) > 0) {
+        absNote -= 1;
+      }
       int octave = absNote / 12;
       int note = absNote % 12;
 
@@ -219,9 +222,12 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
     case KEY_PRESSURE:
       break;
     case CONTROL_CHANGE:
-      if (m.getControllerNumber() == VOLUME_MSB) {
-        int value = m.getControllerValue();
-        midiChannelState[channel].volume = value;
+      switch (m.getControllerNumber()) {
+        case VOLUME_MSB: {
+          int value = m.getControllerValue();
+          midiChannelState[channel].volume = value;
+          break;
+        }
       }
       break;
     case PROGRAM_CHANGE: {
@@ -229,10 +235,26 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       changePreset(patch, channel);
       break;
     }
+    case PITCH_BEND: {
+      // first convert to cents by assuming 2 semitone range (for now)
+      int bend = m.getPitchWheelValue();
+      double cents = ((bend - 8192.0) / 8192.0) * 200;
+      if (cents < 0) {
+        cents = 100.0 + cents;
+      }
+
+      // next convert to a OPM Key Fraction value
+      uint8_t kf = static_cast<uint8_t>(std::round(cents / 1.587301587301587));
+      midiChannelState[channel].KF = kf << 2;
+      constexpr uint8_t minKF = 0;
+      constexpr uint8_t maxKF = 63;
+      kf = std::clamp(kf, minKF, maxKF);
+      interface.write(0x30 + channel, kf << 2);
+      break;
+    }
     case CHANNEL_PRESSURE:
       break;
-    case PITCH_BEND:
-      break;
+
     case MIDI_SYSEX:
       break;
   }
@@ -429,6 +451,7 @@ void YM2151Synth::reset() {
   interface.resetGlobal();
   for (int i = 0; i < 8; i++) {
     interface.resetChannel(i);
+    midiChannelState[i] = {};
   }
 }
 
