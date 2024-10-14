@@ -94,9 +94,10 @@ public:
     write(8, channel | 0);
   }
 
-  void changePreset(OPMPatch& patch, int chan) {
+  void changePreset(OPMPatch& patch, int chan, bool enableLFO) {
     write(0x0F, (patch.channelParams.NE << 7) | (patch.lfoParams.NFRQ));
-    if (patch.lfoParams.LFRQ) {
+    // if (patch.lfoParams.LFRQ) {
+    if (enableLFO) {
       write(0x1B, patch.lfoParams.WF);
       write(0x18, patch.lfoParams.LFRQ);
       write(0x19, patch.lfoParams.PMD | 0x80);
@@ -108,12 +109,33 @@ public:
     for (size_t i = 0; i < sizeof(patch.opParams) / sizeof(patch.opParams[0]); i++) {
       OPMOpParams& op = patch.opParams[i];
       write(0x40 + (i*8) + chan, (op.DT1 << 4) | op.MUL);
-      // write(0x60 + (i*8) + chan, op.TL);
+    }
+    for (size_t i = 0; i < sizeof(patch.opParams) / sizeof(patch.opParams[0]); i++) {
+      OPMOpParams& op = patch.opParams[i];
       write(0x80 + (i*8) + chan, (op.KS << 6) | op.AR);
+    }
+
+    for (size_t i = 0; i < sizeof(patch.opParams) / sizeof(patch.opParams[0]); i++) {
+      OPMOpParams& op = patch.opParams[i];
       write(0xA0 + (i*8) + chan, op.AMS_EN | op.D1R);
+    }
+    for (size_t i = 0; i < sizeof(patch.opParams) / sizeof(patch.opParams[0]); i++) {
+      OPMOpParams& op = patch.opParams[i];
       write(0xC0 + (i*8) + chan, (op.DT2 << 6) | op.D2R);
+    }
+    for (size_t i = 0; i < sizeof(patch.opParams) / sizeof(patch.opParams[0]); i++) {
+      OPMOpParams& op = patch.opParams[i];
       write(0xE0 + (i*8) + chan, (op.D1L << 4) | op.RR);
     }
+    // for (size_t i = 0; i < sizeof(patch.opParams) / sizeof(patch.opParams[0]); i++) {
+    //   OPMOpParams& op = patch.opParams[i];
+    //   write(0x40 + (i*8) + chan, (op.DT1 << 4) | op.MUL);
+    //   // write(0x60 + (i*8) + chan, op.TL);
+    //   write(0x80 + (i*8) + chan, (op.KS << 6) | op.AR);
+    //   write(0xA0 + (i*8) + chan, op.AMS_EN | op.D1R);
+    //   write(0xC0 + (i*8) + chan, (op.DT2 << 6) | op.D2R);
+    //   write(0xE0 + (i*8) + chan, (op.D1L << 4) | op.RR);
+    // }
   }
 
 //  void generate(int16_t* output, uint32_t numsamples) {

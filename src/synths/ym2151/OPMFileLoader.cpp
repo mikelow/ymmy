@@ -12,6 +12,15 @@ bool tryParseUInt8(std::istringstream& iss, uint8_t& value) {
   return false;
 }
 
+bool tryParseBool(std::istringstream& iss, bool& value) {
+  int temp;
+  if (iss >> temp && temp >= 0 && temp <= 1) {
+    value = static_cast<bool>(temp);
+    return true;
+  }
+  return false;
+}
+
 void trimNewline(std::string& str) {
   if (!str.empty() && str.back() == '\r') {
     str.pop_back();
@@ -69,15 +78,18 @@ void OPMFileLoader::parseLFOParams(const std::string& line, OPMLFOParams& lfo) {
   }
 }
 
-void OPMFileLoader::parseCPSParams(const std::string& line, OPMCPSParams* cps) {
-  std::istringstream iss(line.substr(4)); // Skip the "LFO:" part
+void OPMFileLoader::parseCPSParams(const std::string& line, OPMCPSParams& cps) {
+  std::istringstream iss(line.substr(4));
+  if (!tryParseBool(iss, cps.enable_lfo) ||
+      !tryParseBool(iss, cps.reset_lfo)) {
+    std::cerr << "Error parsing CPS parameters: " << line << std::endl;
+    return;
+  }
   for (int i = 0; i < 4; i++) {
-    if (tryParseUInt8(iss, cps[i].vol) &&
-        tryParseUInt8(iss, cps[i].vol_key_scale) &&
-        tryParseUInt8(iss, cps[i].extra_atten)) {
-      // Successfully parsed all LFO parameters
-    } else {
-      std::cerr << "Error parsing LFO parameters: " << line << std::endl;
+    if (!tryParseUInt8(iss, cps.vol_data[i].key_scale_sensitivity) ||
+        !tryParseUInt8(iss, cps.vol_data[i].extra_atten)) {
+      std::cerr << "Error parsing CPS parameters: " << line << std::endl;
+      return;
     }
   }
 }

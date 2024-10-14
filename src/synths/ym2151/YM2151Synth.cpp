@@ -6,7 +6,7 @@
 // The clock rate used by CPS1. We'll need to make this dynamic when we support systems that run at 4mhz.
 constexpr int CPS1_YM2151_CLOCK_RATE = 3579545;
 
-uint8_t keyScaleTable[] = {
+uint8_t ascendingKeyScaleTable[] = {
   0x0,  0x0,  0x0,  0x0,
   0x0,  0x0,  0x0,  0x5,
   0xA,  0xF, 0x14, 0x19,
@@ -22,7 +22,10 @@ uint8_t keyScaleTable[] = {
   0xCF, 0xD4, 0xD9, 0xDE,
   0xE2, 0xE7, 0xEC, 0xF1,
   0xF6, 0xFB, 0xFE, 0xFF,
-  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF
+};
+
+uint8_t descendingKeyScaleTable[] = {
   0xFF, 0xFF, 0xFF, 0xFF,
   0xFF, 0xFF, 0xFF, 0xFF,
   0xFE, 0xFD, 0xFC, 0xFA,
@@ -43,8 +46,9 @@ uint8_t keyScaleTable[] = {
 
 uint8_t calculateKeyScaleAttenuation(char key_scale_sensitivity, uint8_t note) {
   uint8_t index = (note >> 1) & 0x3F;
-  if (key_scale_sensitivity < 0) index += 0x40;
-  uint8_t key_scale_factor = keyScaleTable[index];
+  uint8_t key_scale_factor = (key_scale_sensitivity >= 0) ?
+                                ascendingKeyScaleTable[index] :
+                                descendingKeyScaleTable[index];
   uint8_t ksa = key_scale_sensitivity & 0xF; // Use lower 4 bits (magnitude)
   uint16_t product = key_scale_factor * ksa;
   return (uint8_t)(product >> 7); // Equivalent to dividing by 128
@@ -129,20 +133,28 @@ void YM2151Synth::receiveFile(juce::MemoryBlock& data, SynthFileType fileType) {
   refreshBanks(patches);
 }
 
-void YM2151Synth::changePreset(OPMPatch& patch, int channel) {
+void YM2151Synth::changePreset(OPMPatch& patch, int channel, bool enableLFO) {
   midiChannelState[channel].CON = patch.channelParams.CON;
   midiChannelState[channel].SLOT_MASK = patch.channelParams.SLOT_MASK;
+  midiChannelState[channel].cpsParams = patch.cpsParams;
   for (int i = 0; i < 4; ++i) {
     midiChannelState[channel].TL[i] = patch.opParams[i].TL;
-    midiChannelState[channel].cpsParams[i] = patch.cpsParams[i];
   }
-  interface.changePreset(patch, channel);
+  interface.changePreset(patch, channel, enableLFO);
 }
 
 void YM2151Synth::handleSysex(MidiMessage& message) {
   auto sysexData = message.getSysExData();
   auto sysexDataSize = message.getSysExDataSize();
 
+  // if (sysexData[0] == 0x7F && sysexDataSize >= 6) {
+  //   if (sysexData[2] == 0x04 && sysexData[3] == 0x01) {
+  //     // Master volume
+  //     uint8_t masterVolumeLSB = sysexData[4];
+  //     uint8_t masterVolumeMSB = sysexData[5];
+  //   }
+  //   return;
+  // }
   if (sysexData[0] != 0x7D) {
     return;
   }
@@ -172,6 +184,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
   const uint8_t eventNibble = rawData[0] & 0xf0;
   int channelGroupOffset = channelGroup * 16;
   int channel = (m.getChannel() - 1 + channelGroupOffset) % 8;
+  YM2151MidiChannelState& chanState = midiChannelState[channel];
 
   switch (eventNibble) {
     case NOTE_OFF:
@@ -179,31 +192,11 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       break;
     case NOTE_ON: {
       int absNote = m.getNoteNumber();
-
-      // Set volume of note
-      uint8_t channelVolume = midiChannelState[channel].volume;
-      uint8_t channelVolumeAtten = 0x7F - channelVolume;
-
-      uint8_t attenByte;
-      uint8_t volKeyScaleAtten;
-      uint8_t CON_limits[4] = { 7, 5, 4, 0 };
-      for (int i = 0; i < 4; i++) {
-        uint8_t keyScale = midiChannelState[channel].cpsParams[i].vol_key_scale;
-        volKeyScaleAtten = calculateKeyScaleAttenuation(keyScale, absNote);
-        auto conLimit = CON_limits[i];
-        uint32_t finalAttenuation = volKeyScaleAtten;
-        if (midiChannelState[channel].CON < conLimit) {
-          finalAttenuation += midiChannelState[channel].TL[i];
-        } else {
-          finalAttenuation += midiChannelState[channel].TL[i] + channelVolumeAtten;
-        }
-        attenByte = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
-        interface.write(0x60 + (i*8) + channel, attenByte);
-      }
+      int vel = m.getVelocity();
 
       // temporary adjustment to get notes aligned with 3.58mhz freq
       absNote -= 13;
-      if ((midiChannelState[channel].KF & 0x80) > 0) {
+      if ((chanState.KF & 0x80) > 0) {
         absNote -= 1;
       }
       int octave = absNote / 12;
@@ -211,12 +204,41 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 
       const int noteTable[12] = {0,1,2,4,5,6,8,9,10,12,13,14};
 
-      uint8_t val = ((octave & 7) << 4) | noteTable[note];
-      printf("OCT: %d    NOTE: %d  val: %X  atten: %X  ksAtten: %X \n", octave, note, val, attenByte, volKeyScaleAtten);
+      uint8_t finalNoteValue = ((octave & 7) << 4) | noteTable[note];
+
+      // Set volume of note
+      uint8_t channelVolume = chanState.volume;
+      uint8_t channelVolumeAtten = 0x7F - channelVolume;
+      channelVolumeAtten += 0x7F - vel;
+
+      uint8_t attenByte;
+      uint8_t volKeyScaleAtten;
+      uint8_t CON_limits[4] = { 7, 5, 4, 0 };
+      for (int i = 0; i < 4; i++) {
+        uint8_t keyScale = chanState.cpsParams.vol_data[i].key_scale_sensitivity;
+        volKeyScaleAtten = calculateKeyScaleAttenuation(keyScale, finalNoteValue);
+        auto conLimit = CON_limits[i];
+        uint32_t finalAttenuation = volKeyScaleAtten;
+        if (chanState.CON < conLimit) {
+          finalAttenuation += chanState.TL[i];
+        } else {
+          finalAttenuation += chanState.TL[i] + channelVolumeAtten;
+        }
+        attenByte = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
+        interface.write(0x60 + (i*8) + channel, attenByte);
+      }
+
+      printf("OCT: %d    NOTE: %d  val: %X  atten: %X  ksAtten: %X \n", octave, note, finalNoteValue, attenByte, volKeyScaleAtten);
       // Send octave / note
-      interface.write(0x28 + channel, val);
+      interface.write(0x28 + channel, finalNoteValue);
       // Send note on
-      interface.write(8, midiChannelState[channel].SLOT_MASK | channel);
+      interface.write(8, chanState.SLOT_MASK | channel);
+
+      // If the instrument reset_lfo flag is set, we reset LFO phase after note on
+      if (chanState.cpsParams.reset_lfo) {
+        interface.write(1, 2);
+        interface.write(1, 0);
+      }
       break;
     }
     case KEY_PRESSURE:
@@ -232,7 +254,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       break;
     case PROGRAM_CHANGE: {
       auto patch = loadPresetFromVST(0, m.getProgramChangeNumber());
-      changePreset(patch, channel);
+      changePreset(patch, channel, patch.cpsParams.enable_lfo);
       break;
     }
     case PITCH_BEND: {
@@ -343,7 +365,7 @@ void YM2151Synth::parameterChanged(const String& parameterID, float newValue) {
     }
     auto patch = loadPresetFromVST(bank, preset);
     // TODO: presumably translate the bank/channel to the YM2151 channel
-    changePreset(patch, selectedChannel);
+    changePreset(patch, selectedChannel, patch.cpsParams.enable_lfo);
   }
 }
 
@@ -401,12 +423,15 @@ OPMPatch YM2151Synth::loadPresetFromVST(int bankNum, int presetNum) {
     patch.opParams[i].AMS_EN = static_cast<uint8_t>(static_cast<int>(op.getProperty("AMS-EN")));
   }
 
-  for (size_t i = 0; i < sizeof(patch.cpsParams) / sizeof(patch.cpsParams[0]); ++i) {
-    String opName = String("CPS" + std::to_string(i));
+  auto cps = preset.getChildWithName("CPS");
+  patch.cpsParams.enable_lfo = static_cast<bool>(static_cast<int>(cps.getProperty("enable_lfo")));
+  patch.cpsParams.reset_lfo = static_cast<bool>(static_cast<int>(cps.getProperty("reset_lfo")));
+
+  for (size_t i = 0; i < sizeof(patch.cpsParams.vol_data) / sizeof(patch.cpsParams.vol_data[0]); ++i) {
+    String opName = String("CPS_OP" + std::to_string(i));
     auto op = preset.getChildWithName(opName);
-    patch.cpsParams[i].vol = static_cast<uint8_t>(static_cast<int>(op.getProperty("vol")));
-    patch.cpsParams[i].vol_key_scale = static_cast<uint8_t>(static_cast<int>(op.getProperty("vol_key_scale")));
-    patch.cpsParams[i].extra_atten = static_cast<uint8_t>(static_cast<int>(op.getProperty("extra_atten")));
+    patch.cpsParams.vol_data[i].key_scale_sensitivity = static_cast<uint8_t>(static_cast<int>(op.getProperty("vol_key_scale")));
+    patch.cpsParams.vol_data[i].extra_atten = static_cast<uint8_t>(static_cast<int>(op.getProperty("extra_atten")));
   }
 
   return patch;
@@ -505,12 +530,16 @@ void YM2151Synth::refreshBanks(std::vector<OPMPatch>& patches) {
          }, {},
       }, nullptr);
     }
-    for (int i = 0; i < sizeof(patch.cpsParams)/sizeof(patch.cpsParams[0]); i++) {
-      String opName = "CPS" + std::to_string(i);
+    preset.appendChild({ "CPS", {
+          { "enable_lfo", patch.cpsParams.enable_lfo },
+          { "reset_lfo", patch.cpsParams.reset_lfo },
+         }, {},
+      }, nullptr);
+    for (int i = 0; i < sizeof(patch.cpsParams.vol_data)/sizeof(patch.cpsParams.vol_data[0]); i++) {
+      String opName = "CPS_OP" + std::to_string(i);
       preset.appendChild({ opName, {
-          { "vol", patch.cpsParams[i].vol },
-          { "vol_key_scale", patch.cpsParams[i].vol_key_scale },
-          { "extra_atten", patch.cpsParams[i].extra_atten },
+          { "vol_key_scale", patch.cpsParams.vol_data[i].key_scale_sensitivity },
+          { "extra_atten", patch.cpsParams.vol_data[i].extra_atten },
          }, {},
       }, nullptr);
     }
