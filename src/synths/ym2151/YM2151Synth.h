@@ -72,6 +72,7 @@ private:
   YmmyProcessor* processor;
   LagrangeInterpolator resamplers[2];
   std::unique_ptr<AudioBuffer<float>> nativeBuffer;
+  juce::AudioBuffer<float> tempBuffer;
 
   YM2151MidiChannelState midiChannelState[8] = {};
 

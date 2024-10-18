@@ -155,10 +155,11 @@ public:
 //    }
 //  }
 
-  void generate(float* out[], int numSamples) {
+  void generate(float* out[], int offset, int numSamples) {
     constexpr int maxInt = 32767;
     update_clocks(numSamples);
-    for (uint32_t i = 0; i < numSamples; ++i) {
+    int endIndex = offset + numSamples;
+    for (uint32_t i = offset; i < endIndex; ++i) {
       m_chip.generate(&opm_out);
       for (int c=0; c<2; ++c) {
         if (opm_out.data[c] > 32767 || opm_out.data[c] < -32768) {

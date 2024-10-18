@@ -309,18 +309,12 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 }
 
 void YM2151Synth::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
-  MidiBuffer processedMidi;
   int time;
   MidiMessage m;
 
-  for (MidiBuffer::Iterator i{midiMessages}; i.getNextEvent(m, time);) {
-    processMidiMessage(m);
-  }
-
   auto bufferWritePointers = buffer.getArrayOfWritePointers();
   if (buffer.getNumChannels() < 2) {
-    AlertWindow::showMessageBoxAsync (AlertWindow::WarningIcon,"Error",
-                                     "Expected at least 2 write buffers for stereo playback. Is there a problem with the current audio device?.");
+    DBG("Error: Expected at least 2 write buffers for stereo playback.");
     return;
   }
 
@@ -328,22 +322,38 @@ void YM2151Synth::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
   float* writeBuffers[2] = {nativeBufferWritePointers[0], nativeBufferWritePointers[1]};
 
   int numNativeSamples = nativeBuffer->getNumSamples();
-  double ratio = static_cast<double>(nativeBuffer->getNumSamples()) / processor->getSampleRate();
-  interface.generate(writeBuffers, ceil(buffer.getNumSamples() * ratio));
+  double ratio = static_cast<double>(numNativeSamples) / processor->getSampleRate();
+
+  int currentTime = 0;
+  int bufferOffset = 0;
+  float samplesRemainder = 0;
+  for (MidiBuffer::Iterator i{midiMessages}; i.getNextEvent(m, time);) {
+    if (time > currentTime) {
+      float samplesElapsed = ((time - currentTime) * ratio) + samplesRemainder;
+      float samplesToGenerate;
+      samplesRemainder = std::modf(samplesElapsed, &samplesToGenerate);
+
+      interface.generate(writeBuffers, bufferOffset, samplesToGenerate);
+      bufferOffset += samplesToGenerate;
+      currentTime = time;
+    }
+    processMidiMessage(m);
+  }
+
+  const int numSamples = buffer.getNumSamples();
+  int remainingSamplesToGenerate = ceil(numSamples * ratio) - bufferOffset;
+  interface.generate(writeBuffers, bufferOffset, remainingSamplesToGenerate);
 
   // Mix generated samples with existing content in the buffer
   for (int channel = 0; channel < 2; ++channel) {
     float* output = bufferWritePointers[channel];
-    // resamplers[channel].process(ratio, nativeBufferWritePointers[channel], output, buffer.getNumSamples());
-    float tempBuffer[buffer.getNumSamples()];
+    tempBuffer.setSize(1, numSamples, false, false, true);
 
-    // Use the resampler to write into a temporary buffer
-    resamplers[channel].process(ratio, nativeBufferWritePointers[channel], tempBuffer, buffer.getNumSamples());
+    // Use the resampler to write into the temporary buffer
+    resamplers[channel].process(ratio, nativeBufferWritePointers[channel], tempBuffer.getWritePointer(0), numSamples);
 
-    // Add the contents of the tempBuffer to the output buffer
-    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-      output[sample] += tempBuffer[sample];
-    }
+    // Add the contents of the tempBuffer to the output buffer using SIMD operations
+    juce::FloatVectorOperations::add(output, tempBuffer.getReadPointer(0), numSamples);
   }
 }
 
