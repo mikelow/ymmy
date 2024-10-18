@@ -174,6 +174,46 @@ void YM2151Synth::handleSysex(MidiMessage& message) {
   }
 }
 
+void YM2151Synth::setChannelVolume(int channel, uint8_t atten[4]) {
+  for (int i = 0; i < 4; i++) {
+    interface.write(0x60 + (i*8) + channel, atten[i]);
+  }
+}
+
+void YM2151Synth::cpsChannelVolumeUpdate(int channel) {
+  YM2151MidiChannelState& chanState = midiChannelState[channel];
+
+  if (!chanState.isNoteActive) {
+    return;
+  }
+
+  uint8_t note = chanState.note;
+  uint8_t velocity = chanState.velocity;
+  uint8_t channelVolume = chanState.volume;
+  uint8_t channelVolumeAtten = 0x7F - channelVolume;
+  channelVolumeAtten += 0x7F - velocity;
+
+  uint8_t attenByte;
+  uint8_t volKeyScaleAtten;
+  uint8_t CON_limits[4] = { 7, 5, 4, 0 };
+  uint8_t opAtten[4];
+  for (int i = 0; i < 4; i++) {
+    uint8_t keyScale = chanState.cpsParams.vol_data[i].key_scale_sensitivity;
+    volKeyScaleAtten = calculateKeyScaleAttenuation(keyScale, note);
+    auto conLimit = CON_limits[i];
+    uint32_t finalAttenuation = volKeyScaleAtten;
+    if (chanState.CON < conLimit) {
+      finalAttenuation += chanState.TL[i];
+    } else {
+      finalAttenuation += chanState.TL[i] + channelVolumeAtten;
+    }
+    // attenByte = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
+    opAtten[i] = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
+    // interface.write(0x60 + (i*8) + channel, attenByte);
+  }
+  setChannelVolume(channel, opAtten);
+}
+
 void YM2151Synth::processMidiMessage(MidiMessage& m) {
   auto rawData = m.getRawData();
   if (rawData[0] == 0xF0) {
@@ -188,6 +228,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 
   switch (eventNibble) {
     case NOTE_OFF:
+      midiChannelState[channel].isNoteActive = false;
       interface.write(8, channel);
       break;
     case NOTE_ON: {
@@ -207,28 +248,12 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       uint8_t finalNoteValue = ((octave & 7) << 4) | noteTable[note];
 
       // Set volume of note
-      uint8_t channelVolume = chanState.volume;
-      uint8_t channelVolumeAtten = 0x7F - channelVolume;
-      channelVolumeAtten += 0x7F - vel;
+      midiChannelState[channel].isNoteActive = true;
+      midiChannelState[channel].note = finalNoteValue;
+      midiChannelState[channel].velocity = vel;
+      cpsChannelVolumeUpdate(channel);
 
-      uint8_t attenByte;
-      uint8_t volKeyScaleAtten;
-      uint8_t CON_limits[4] = { 7, 5, 4, 0 };
-      for (int i = 0; i < 4; i++) {
-        uint8_t keyScale = chanState.cpsParams.vol_data[i].key_scale_sensitivity;
-        volKeyScaleAtten = calculateKeyScaleAttenuation(keyScale, finalNoteValue);
-        auto conLimit = CON_limits[i];
-        uint32_t finalAttenuation = volKeyScaleAtten;
-        if (chanState.CON < conLimit) {
-          finalAttenuation += chanState.TL[i];
-        } else {
-          finalAttenuation += chanState.TL[i] + channelVolumeAtten;
-        }
-        attenByte = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
-        interface.write(0x60 + (i*8) + channel, attenByte);
-      }
-
-      printf("OCT: %d    NOTE: %d  val: %X  atten: %X  ksAtten: %X \n", octave, note, finalNoteValue, attenByte, volKeyScaleAtten);
+      // printf("OCT: %d    NOTE: %d  val: %X  atten: %X  ksAtten: %X \n", octave, note, finalNoteValue);
       // Send octave / note
       interface.write(0x28 + channel, finalNoteValue);
       // Send note on
@@ -248,6 +273,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
         case VOLUME_MSB: {
           int value = m.getControllerValue();
           midiChannelState[channel].volume = value;
+          cpsChannelVolumeUpdate(channel);
           break;
         }
       }

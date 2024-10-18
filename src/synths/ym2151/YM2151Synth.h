@@ -14,6 +14,9 @@ struct YM2151MidiChannelState {
   uint8_t TL[4];
   int8_t KF;
   OPMCPSParams cpsParams;
+  uint8_t note = 0;
+  uint8_t velocity = 0;
+  uint8_t isNoteActive = false;
 };
 
 class YM2151Synth: public Synth,
@@ -61,6 +64,9 @@ private:
   void handleSysex(MidiMessage& message);
   void processMidiMessage(MidiMessage& m);
   OPMPatch loadPresetFromVST(int bankNum, int presetNum);
+  void setChannelVolume(int channel, uint8_t atten[4]);
+  void cpsChannelVolumeUpdate(int channel);
+
 
 private:
   YmmyProcessor* processor;
