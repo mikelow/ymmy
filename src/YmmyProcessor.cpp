@@ -38,10 +38,10 @@ AudioProcessorValueTreeState::ParameterLayout YmmyProcessor::createParameterLayo
 //  std::make_unique<AudioParameterInt>("channel", "currently selected channel", 0, maxChannels, MidiConstants::midiMinValue, "Channel" );
 
   auto fluidSynthParams = FluidSynthSynth::createParameterGroup();
-  // auto ym2151SynthParams = YM2151Synth::createParameterGroup();
+  auto ym2151SynthParams = YM2151Synth::createParameterGroup();
   // Add groups to the layout
-  // layout.add(std::move(fluidSynthParams));
-  // layout.add(std::move(ym2151SynthParams));
+  layout.add(std::move(fluidSynthParams));
+  layout.add(std::move(ym2151SynthParams));
 //  layout.add(std::move(ym2151Params));
 
   return layout;
@@ -196,6 +196,12 @@ void YmmyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
       if (message.isSysEx()) {
         if (handleSysex(message, samplePosition, synthMidiBuffers)) {
           continue;
+        }
+      } else {
+        auto channel = message.getChannel() - 1;
+        if (auto it = channelToSynthMap.find(channel + channelGroup * 16); it != channelToSynthMap.end() && it->second != nullptr) {
+          Synth* synth = it->second;
+          synthMidiBuffers[synth].addEvent(message, samplePosition);
         }
       }
     }

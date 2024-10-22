@@ -8,7 +8,7 @@
 class YmmyProcessor;
 
 struct YM2151MidiChannelState {
-  uint8_t volume;
+  uint8_t volume = 0x7F;
   uint8_t CON;
   uint8_t SLOT_MASK;
   uint8_t TL[4];
