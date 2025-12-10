@@ -134,6 +134,8 @@ void YM2151Synth::receiveFile(juce::MemoryBlock& data, SynthFileType fileType) {
 }
 
 void YM2151Synth::changePreset(OPMPatch& patch, int channel, bool enableLFO) {
+  midiChannelState[channel].RL = patch.channelParams.PAN;
+  midiChannelState[channel].FL = patch.channelParams.FL << 3;
   midiChannelState[channel].CON = patch.channelParams.CON;
   midiChannelState[channel].SLOT_MASK = patch.channelParams.SLOT_MASK;
   midiChannelState[channel].cpsParams = patch.cpsParams;
@@ -180,6 +182,13 @@ void YM2151Synth::setChannelVolume(int channel, uint8_t atten[4]) {
   }
 }
 
+void YM2151Synth::setChannelRL(int channel, RLSetting lr) {
+  uint8_t rlVal = static_cast<uint8_t>(lr);
+  midiChannelState[channel].RL = rlVal;
+  uint8_t dataByte = rlVal | midiChannelState[channel].FL | midiChannelState[channel].CON;
+  interface.write(0x20 + channel, dataByte);
+}
+
 void YM2151Synth::cpsChannelVolumeUpdate(int channel) {
   YM2151MidiChannelState& chanState = midiChannelState[channel];
 
@@ -212,6 +221,42 @@ void YM2151Synth::cpsChannelVolumeUpdate(int channel) {
     // interface.write(0x60 + (i*8) + channel, attenByte);
   }
   setChannelVolume(channel, opAtten);
+}
+
+void YM2151Synth::defaultChannelVolumeUpdate(int channel) {
+  YM2151MidiChannelState& chanState = midiChannelState[channel];
+
+  if (!chanState.isNoteActive) {
+    return;
+  }
+
+  uint8_t CON_limits[8] = { 1, 1, 1, 1, 2, 3, 3, 4 };
+  uint8_t opAtten[4];
+
+  auto conLimit = CON_limits[chanState.CON];
+  for (int i = 0; i < 4; i++) {
+    int slot = 3 - i;
+    uint8_t tl = chanState.TL[slot];
+    if (i < conLimit) {
+      tl += (0x7F - chanState.volume);
+      tl += (0x7F - chanState.velocity);
+    }
+    opAtten[slot] = tl;
+  }
+  setChannelVolume(channel, opAtten);
+}
+
+void YM2151Synth::defaultChannelPanUpdate(int channel) {
+  YM2151MidiChannelState& chanState = midiChannelState[channel];
+  uint8_t pan = chanState.pan;
+
+  if (pan == 0) {
+    setChannelRL(channel, RLSetting::L);
+  } else if (pan == 0x7F) {
+    setChannelRL(channel, RLSetting::R);
+  } else {
+    setChannelRL(channel, RLSetting::RL);
+  }
 }
 
 void YM2151Synth::processMidiMessage(MidiMessage& m) {
@@ -251,9 +296,11 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       midiChannelState[channel].isNoteActive = true;
       midiChannelState[channel].note = finalNoteValue;
       midiChannelState[channel].velocity = vel;
-      cpsChannelVolumeUpdate(channel);
+      defaultChannelVolumeUpdate(channel);
+      // cpsChannelVolumeUpdate(channel);
 
-      // printf("OCT: %d    NOTE: %d  val: %X  atten: %X  ksAtten: %X \n", octave, note, finalNoteValue);
+      // printf("OCT: %d    NOTE: %d  val: %X  atten: %X  ksAtten: %X \n", octave, note,
+      // finalNoteValue);
       // Send octave / note
       interface.write(0x28 + channel, finalNoteValue);
       // Send note on
@@ -273,8 +320,14 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
         case VOLUME_MSB: {
           int value = m.getControllerValue();
           midiChannelState[channel].volume = value;
-          cpsChannelVolumeUpdate(channel);
+          // cpsChannelVolumeUpdate(channel);
+          defaultChannelVolumeUpdate(channel);
           break;
+        }
+        case PAN_MSB: {
+          int value = m.getControllerValue();
+          midiChannelState[channel].pan = value;
+          defaultChannelPanUpdate(channel);
         }
       }
       break;
@@ -512,7 +565,8 @@ void YM2151Synth::reset() {
   interface.resetGlobal();
   for (int i = 0; i < 8; i++) {
     interface.resetChannel(i);
-    midiChannelState[i] = {};
+    midiChannelState[i].reset();
+
   }
 }
 

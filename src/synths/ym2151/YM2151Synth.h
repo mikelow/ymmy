@@ -9,14 +9,40 @@ class YmmyProcessor;
 
 struct YM2151MidiChannelState {
   uint8_t volume = 0x7F;
-  uint8_t CON;
-  uint8_t SLOT_MASK;
+  uint8_t pan = 64;
+  uint8_t RL = 0xC0;
+  uint8_t FL = 0;
+  uint8_t CON = 0;
+  uint8_t SLOT_MASK = 120;
   uint8_t TL[4];
   int8_t KF;
   OPMCPSParams cpsParams;
   uint8_t note = 0;
   uint8_t velocity = 0;
   uint8_t isNoteActive = false;
+
+public:
+  void reset() {
+    note = 0;
+    volume = 0x7F;
+    velocity = 0x7F;
+    pan = 64;
+    isNoteActive = false;
+    RL = 0xC0;
+    FL = 0;
+    CON = 0;
+    SLOT_MASK = 0x78;
+    KF = 0;
+    memset(TL, 0, sizeof(TL));
+    cpsParams = {};
+  }
+};
+
+
+enum class RLSetting : uint8_t {
+  R = 0x80,
+  L = 0x40,
+  RL = 0xC0,
 };
 
 class YM2151Synth: public Synth,
@@ -65,7 +91,10 @@ private:
   void processMidiMessage(MidiMessage& m);
   OPMPatch loadPresetFromVST(int bankNum, int presetNum);
   void setChannelVolume(int channel, uint8_t atten[4]);
+  void setChannelRL(int channel, RLSetting lr);
   void cpsChannelVolumeUpdate(int channel);
+  void defaultChannelVolumeUpdate(int channel);
+  void defaultChannelPanUpdate(int channel);
 
 
 private:

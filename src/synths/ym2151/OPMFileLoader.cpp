@@ -12,6 +12,15 @@ bool tryParseUInt8(std::istringstream& iss, uint8_t& value) {
   return false;
 }
 
+bool tryParseUInt16(std::istringstream& iss, uint16_t& value) {
+  int temp;
+  if (iss >> temp && temp >= 0 && temp <= 65535) {
+    value = static_cast<uint16_t>(temp);
+    return true;
+  }
+  return false;
+}
+
 bool tryParseBool(std::istringstream& iss, bool& value) {
   int temp;
   if (iss >> temp && temp >= 0 && temp <= 1) {
@@ -128,8 +137,8 @@ std::vector<OPMPatch> OPMFileLoader::parseOpmStream(std::istream& inputStream) {
         currentPatch = OPMPatch();
       }
       std::istringstream iss(line.substr(2));  // Remove '@' and parse
-      if (!tryParseUInt8(iss, currentPatch.number)) {
-        return {};
+      if (!tryParseUInt16(iss, currentPatch.number)) {
+        return patches;
       }
       // Skip any additional whitespace after the number
       iss >> std::ws;

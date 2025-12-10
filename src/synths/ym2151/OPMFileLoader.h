@@ -36,7 +36,7 @@ struct OPMCPSParams {
 
 struct OPMPatch {
   std::string name;
-  uint8_t number;
+  uint16_t number;
   OPMLFOParams lfoParams;
   OPMChannelParams channelParams;
   OPMOpParams opParams[4];
