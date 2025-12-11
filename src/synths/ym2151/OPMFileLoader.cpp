@@ -1,4 +1,5 @@
 #include "OPMFileLoader.h"
+#include "YM2151Driver.h"
 
 OPMFileLoader::OPMFileLoader() {}
 OPMFileLoader::~OPMFileLoader() {}
@@ -87,23 +88,6 @@ void OPMFileLoader::parseLFOParams(const std::string& line, OPMLFOParams& lfo) {
   }
 }
 
-void OPMFileLoader::parseCPSParams(const std::string& line, OPMCPSParams& cps) {
-  std::istringstream iss(line.substr(4));
-  if (!tryParseBool(iss, cps.enable_lfo) ||
-      !tryParseBool(iss, cps.reset_lfo)) {
-    std::cerr << "Error parsing CPS parameters: " << line << std::endl;
-    return;
-  }
-  for (int i = 0; i < 4; i++) {
-    if (!tryParseUInt8(iss, cps.vol_data[i].key_scale_sensitivity) ||
-        !tryParseUInt8(iss, cps.vol_data[i].extra_atten)) {
-      std::cerr << "Error parsing CPS parameters: " << line << std::endl;
-      return;
-    }
-  }
-}
-
-
 std::vector<OPMPatch> OPMFileLoader::parseOpmFile(const std::string& fileName) {
   std::ifstream file(fileName);
   if (!file.is_open()) {
@@ -130,7 +114,6 @@ std::vector<OPMPatch> OPMFileLoader::parseOpmStream(std::istream& inputStream) {
       continue;
 
     auto substr = line.substr(0, 3);
-
     if (substr[0] == '@' && substr[1] == ':') {
       if (!currentPatch.name.empty()) {
         patches.push_back(currentPatch);
@@ -158,8 +141,8 @@ std::vector<OPMPatch> OPMFileLoader::parseOpmStream(std::istream& inputStream) {
       parseOperatorParams(line, currentPatch.opParams[1]);
     } else if (substr == "C2:") {
       parseOperatorParams(line, currentPatch.opParams[3]);
-    } else if (substr == "CPS") {
-      parseCPSParams(line, currentPatch.cpsParams);
+    } else if (parseDriverMetadataLine(line, currentPatch.driver)) {
+      // Driver metadata line handled
     }
   }
 

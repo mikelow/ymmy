@@ -63,6 +63,8 @@ target_sources(${PROJECT_NAME}
     "${SRC_DIR}/synths/fluidsynth/FluidSynthSynth.cpp"
     "${SRC_DIR}/synths/ym2151/YM2151Component.cpp"
     "${SRC_DIR}/synths/ym2151/YM2151Synth.cpp"
+    "${SRC_DIR}/synths/ym2151/Cps1YM2151Driver.cpp"
+    "${SRC_DIR}/synths/ym2151/YM2151Driver.cpp"
     "${SRC_DIR}/synths/ym2151/OPMFileLoader.cpp"
     "${SRC_DIR}/common/utility.cpp"
     "./lib/ymfm/src/ymfm_opm.cpp"

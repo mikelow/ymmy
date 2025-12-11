@@ -1,58 +1,13 @@
 #include "YM2151Synth.h"
 #include "../../YmmyProcessor.h"
 #include "../../MidiConstants.h"
+#include <algorithm>
+#include <cctype>
 #include <random>
+#include <sstream>
 
 // The clock rate used by CPS1. We'll need to make this dynamic when we support systems that run at 4mhz.
 constexpr int CPS1_YM2151_CLOCK_RATE = 3579545;
-
-uint8_t ascendingKeyScaleTable[] = {
-  0x0,  0x0,  0x0,  0x0,
-  0x0,  0x0,  0x0,  0x5,
-  0xA,  0xF, 0x14, 0x19,
-  0x1E, 0x22, 0x27, 0x2C,
-  0x31, 0x36, 0x3B, 0x40,
-  0x45, 0x4A, 0x4F, 0x54,
-  0x59, 0x5E, 0x62, 0x67,
-  0x6C, 0x71, 0x76, 0x7B,
-  0x80, 0x85, 0x8A, 0x8F,
-  0x94, 0x99, 0x9E, 0xA2,
-  0xA7, 0xAC, 0xB1, 0xB6,
-  0xBB, 0xC0, 0xC5, 0xCA,
-  0xCF, 0xD4, 0xD9, 0xDE,
-  0xE2, 0xE7, 0xEC, 0xF1,
-  0xF6, 0xFB, 0xFE, 0xFF,
-  0xFF, 0xFF, 0xFF, 0xFF
-};
-
-uint8_t descendingKeyScaleTable[] = {
-  0xFF, 0xFF, 0xFF, 0xFF,
-  0xFF, 0xFF, 0xFF, 0xFF,
-  0xFE, 0xFD, 0xFC, 0xFA,
-  0xF8, 0xF6, 0xF3, 0xF0,
-  0xEC, 0xE8, 0xE4, 0xDF,
-  0xDA, 0xD4, 0xCF, 0xC8,
-  0xC2, 0xBB, 0xB3, 0xAB,
-  0xA3, 0x9B, 0x92, 0x89,
-  0x7F, 0x75, 0x6C, 0x63,
-  0x5B, 0x53, 0x4B, 0x43,
-  0x3C, 0x36, 0x2F, 0x2A,
-  0x24, 0x1F, 0x1A, 0x16,
-  0x12,  0xE,  0xB,  0x8,
-  0x6,  0x4,  0x2,  0x1,
-  0x1,  0x1,  0x1,  0x0,
-  0x0,  0x0,  0x0,  0x0
-};
-
-uint8_t calculateKeyScaleAttenuation(char key_scale_sensitivity, uint8_t note) {
-  uint8_t index = (note >> 1) & 0x3F;
-  uint8_t key_scale_factor = (key_scale_sensitivity >= 0) ?
-                                ascendingKeyScaleTable[index] :
-                                descendingKeyScaleTable[index];
-  uint8_t ksa = key_scale_sensitivity & 0xF; // Use lower 4 bits (magnitude)
-  uint16_t product = key_scale_factor * ksa;
-  return (uint8_t)(product >> 7); // Equivalent to dividing by 128
-}
 
 
 namespace YM2151SynthParam {
@@ -71,6 +26,37 @@ namespace YM2151SynthParam {
   }
 
   std::map<juce::String, IntParameter> paramIdToParam = createParamIdMap();
+}
+
+namespace {
+  juce::String serializeDriverData(const std::vector<uint8_t>& data) {
+    StringArray parts;
+    for (auto byte : data) {
+      parts.add(String(static_cast<int>(byte)));
+    }
+    return parts.joinIntoString(" ");
+  }
+
+  std::vector<uint8_t> parseDriverData(const juce::String& data) {
+    std::vector<uint8_t> parsed;
+    std::istringstream iss(data.toStdString());
+    int value = 0;
+    while (iss >> value) {
+      if (value >= 0 && value <= 0xFF) {
+        parsed.push_back(static_cast<uint8_t>(value));
+      }
+    }
+    return parsed;
+  }
+}
+
+
+namespace {
+  std::string toLowerCopy(const std::string& value) {
+    std::string lowered(value.size(), '\0');
+    std::transform(value.begin(), value.end(), lowered.begin(), [](unsigned char c) { return std::tolower(c); });
+    return lowered;
+  }
 }
 
 
@@ -133,16 +119,20 @@ void YM2151Synth::receiveFile(juce::MemoryBlock& data, SynthFileType fileType) {
   refreshBanks(patches);
 }
 
-void YM2151Synth::changePreset(OPMPatch& patch, int channel, bool enableLFO) {
+void YM2151Synth::changePreset(OPMPatch& patch, int channel) {
+  switchDriverIfNeeded(patch.driver.name, channel);
+
   midiChannelState[channel].RL = patch.channelParams.PAN;
   midiChannelState[channel].FL = patch.channelParams.FL << 3;
   midiChannelState[channel].CON = patch.channelParams.CON;
   midiChannelState[channel].SLOT_MASK = patch.channelParams.SLOT_MASK;
-  midiChannelState[channel].cpsParams = patch.cpsParams;
   for (int i = 0; i < 4; ++i) {
     midiChannelState[channel].TL[i] = patch.opParams[i].TL;
   }
-  interface.changePreset(patch, channel, enableLFO);
+  ensureCurrentDriver();
+  currentDriver->assignPatchToChannel(patch, channel, *this, midiChannelState[channel]);
+
+  interface.changePreset(patch, channel, currentDriver->enableLFO(channel));
 }
 
 void YM2151Synth::handleSysex(MidiMessage& message) {
@@ -176,7 +166,7 @@ void YM2151Synth::handleSysex(MidiMessage& message) {
   }
 }
 
-void YM2151Synth::setChannelVolume(int channel, uint8_t atten[4]) {
+void YM2151Synth::setChannelVolume(int channel, const std::array<uint8_t, 4>& atten) {
   for (int i = 0; i < 4; i++) {
     interface.write(0x60 + (i*8) + channel, atten[i]);
   }
@@ -189,49 +179,15 @@ void YM2151Synth::setChannelRL(int channel, RLSetting lr) {
   interface.write(0x20 + channel, dataByte);
 }
 
-void YM2151Synth::cpsChannelVolumeUpdate(int channel) {
-  YM2151MidiChannelState& chanState = midiChannelState[channel];
-
-  if (!chanState.isNoteActive) {
-    return;
-  }
-
-  uint8_t note = chanState.note;
-  uint8_t velocity = chanState.velocity;
-  uint8_t channelVolume = chanState.volume;
-  uint8_t channelVolumeAtten = 0x7F - channelVolume;
-  channelVolumeAtten += 0x7F - velocity;
-
-  uint8_t attenByte;
-  uint8_t volKeyScaleAtten;
-  uint8_t CON_limits[4] = { 7, 5, 4, 0 };
-  uint8_t opAtten[4];
-  for (int i = 0; i < 4; i++) {
-    uint8_t keyScale = chanState.cpsParams.vol_data[i].key_scale_sensitivity;
-    volKeyScaleAtten = calculateKeyScaleAttenuation(keyScale, note);
-    auto conLimit = CON_limits[i];
-    uint32_t finalAttenuation = volKeyScaleAtten;
-    if (chanState.CON < conLimit) {
-      finalAttenuation += chanState.TL[i];
-    } else {
-      finalAttenuation += chanState.TL[i] + channelVolumeAtten;
-    }
-    // attenByte = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
-    opAtten[i] = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
-    // interface.write(0x60 + (i*8) + channel, attenByte);
-  }
-  setChannelVolume(channel, opAtten);
-}
-
 void YM2151Synth::defaultChannelVolumeUpdate(int channel) {
   YM2151MidiChannelState& chanState = midiChannelState[channel];
 
-  if (!chanState.isNoteActive) {
-    return;
-  }
+  // if (!chanState.isNoteActive) {
+  //   return;
+  // }
 
   uint8_t CON_limits[8] = { 1, 1, 1, 1, 2, 3, 3, 4 };
-  uint8_t opAtten[4];
+  std::array<uint8_t, 4> opAtten{};
 
   auto conLimit = CON_limits[chanState.CON];
   for (int i = 0; i < 4; i++) {
@@ -257,6 +213,15 @@ void YM2151Synth::defaultChannelPanUpdate(int channel) {
   } else {
     setChannelRL(channel, RLSetting::RL);
   }
+}
+
+void YM2151Synth::applyOperatorAttenuation(int channel, const std::array<uint8_t, 4>& attenuation) {
+  setChannelVolume(channel, attenuation);
+}
+
+void YM2151Synth::updateChannelVolume(int channel) {
+  ensureCurrentDriver();
+  currentDriver->updateChannelVolume(channel, *this, midiChannelState[channel]);
 }
 
 void YM2151Synth::processMidiMessage(MidiMessage& m) {
@@ -296,8 +261,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       midiChannelState[channel].isNoteActive = true;
       midiChannelState[channel].note = finalNoteValue;
       midiChannelState[channel].velocity = vel;
-      defaultChannelVolumeUpdate(channel);
-      // cpsChannelVolumeUpdate(channel);
+      updateChannelVolume(channel);
 
       // printf("OCT: %d    NOTE: %d  val: %X  atten: %X  ksAtten: %X \n", octave, note,
       // finalNoteValue);
@@ -307,7 +271,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       interface.write(8, chanState.SLOT_MASK | channel);
 
       // If the instrument reset_lfo flag is set, we reset LFO phase after note on
-      if (chanState.cpsParams.reset_lfo) {
+      if (currentDriver && currentDriver->shouldResetLFOOnNoteOn(channel)) {
         interface.write(1, 2);
         interface.write(1, 0);
       }
@@ -320,8 +284,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
         case VOLUME_MSB: {
           int value = m.getControllerValue();
           midiChannelState[channel].volume = value;
-          // cpsChannelVolumeUpdate(channel);
-          defaultChannelVolumeUpdate(channel);
+          updateChannelVolume(channel);
           break;
         }
         case PAN_MSB: {
@@ -333,7 +296,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       break;
     case PROGRAM_CHANGE: {
       auto patch = loadPresetFromVST(0, m.getProgramChangeNumber());
-      changePreset(patch, channel, patch.cpsParams.enable_lfo);
+      changePreset(patch, channel);
       break;
     }
     case PITCH_BEND: {
@@ -454,7 +417,7 @@ void YM2151Synth::parameterChanged(const String& parameterID, float newValue) {
     }
     auto patch = loadPresetFromVST(bank, preset);
     // TODO: presumably translate the bank/channel to the YM2151 channel
-    changePreset(patch, selectedChannel, patch.cpsParams.enable_lfo);
+    changePreset(patch, selectedChannel);
   }
 }
 
@@ -512,15 +475,10 @@ OPMPatch YM2151Synth::loadPresetFromVST(int bankNum, int presetNum) {
     patch.opParams[i].AMS_EN = static_cast<uint8_t>(static_cast<int>(op.getProperty("AMS-EN")));
   }
 
-  auto cps = preset.getChildWithName("CPS");
-  patch.cpsParams.enable_lfo = static_cast<bool>(static_cast<int>(cps.getProperty("enable_lfo")));
-  patch.cpsParams.reset_lfo = static_cast<bool>(static_cast<int>(cps.getProperty("reset_lfo")));
-
-  for (size_t i = 0; i < sizeof(patch.cpsParams.vol_data) / sizeof(patch.cpsParams.vol_data[0]); ++i) {
-    String opName = String("CPS_OP" + std::to_string(i));
-    auto op = preset.getChildWithName(opName);
-    patch.cpsParams.vol_data[i].key_scale_sensitivity = static_cast<uint8_t>(static_cast<int>(op.getProperty("vol_key_scale")));
-    patch.cpsParams.vol_data[i].extra_atten = static_cast<uint8_t>(static_cast<int>(op.getProperty("extra_atten")));
+  auto driver = preset.getChildWithName("DRIVER");
+  if (driver.isValid()) {
+    patch.driver.name = driver.getProperty("name").toString().toStdString();
+    patch.driver.dataBytes = parseDriverData(driver.getProperty("data").toString());
   }
 
   return patch;
@@ -566,8 +524,54 @@ void YM2151Synth::reset() {
   for (int i = 0; i < 8; i++) {
     interface.resetChannel(i);
     midiChannelState[i].reset();
-
   }
+  currentDriver = createDriver("default");
+  activeDriverKey = normalizeDriverName("default");
+}
+
+std::string YM2151Synth::normalizeDriverName(const std::string& name) const {
+  auto normalized = toLowerCopy(name);
+  if (normalized.empty()) {
+    return "default";
+  }
+  return normalized;
+}
+
+void YM2151Synth::ensureCurrentDriver() {
+  if (currentDriver) {
+    return;
+  }
+
+  auto requestedKey = activeDriverKey.empty() ? normalizeDriverName("") : activeDriverKey;
+  currentDriver = createDriver(requestedKey);
+  activeDriverKey = normalizeDriverName(requestedKey);
+}
+
+void YM2151Synth::resetChannelsExcept(int preservedChannel) {
+  for (int i = 0; i < 8; ++i) {
+    if (i == preservedChannel) {
+      continue;
+    }
+    interface.resetChannel(i);
+    midiChannelState[i].reset();
+  }
+}
+
+void YM2151Synth::switchDriverIfNeeded(const std::string& desiredDriverName, int targetChannel) {
+  auto desiredKey = normalizeDriverName(desiredDriverName);
+  const bool needsSwitch = !currentDriver || activeDriverKey != desiredKey;
+  if (!needsSwitch) {
+    return;
+  }
+
+  resetChannelsExcept(targetChannel);
+
+  currentDriver = createDriver(desiredDriverName);
+  if (!currentDriver) {
+    currentDriver = createDriver("");
+    desiredKey = normalizeDriverName("");
+  }
+  activeDriverKey = desiredKey;
 }
 
 void YM2151Synth::refreshBanks(std::vector<OPMPatch>& patches) {
@@ -620,18 +624,12 @@ void YM2151Synth::refreshBanks(std::vector<OPMPatch>& patches) {
          }, {},
       }, nullptr);
     }
-    preset.appendChild({ "CPS", {
-          { "enable_lfo", patch.cpsParams.enable_lfo },
-          { "reset_lfo", patch.cpsParams.reset_lfo },
-         }, {},
-      }, nullptr);
-    for (int i = 0; i < sizeof(patch.cpsParams.vol_data)/sizeof(patch.cpsParams.vol_data[0]); i++) {
-      String opName = "CPS_OP" + std::to_string(i);
-      preset.appendChild({ opName, {
-          { "vol_key_scale", patch.cpsParams.vol_data[i].key_scale_sensitivity },
-          { "extra_atten", patch.cpsParams.vol_data[i].extra_atten },
-         }, {},
-      }, nullptr);
+    if (!patch.driver.name.empty()) {
+      preset.appendChild({ "DRIVER", {
+            { "name", String(patch.driver.name) },
+            { "data", serializeDriverData(patch.driver.dataBytes) },
+           }, {},
+        }, nullptr);
     }
     bank.appendChild(preset, nullptr);
   }

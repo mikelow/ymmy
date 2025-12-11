@@ -1,9 +1,12 @@
 #pragma once
 
+#include <array>
+
 #include "../Synth.h"
 #include "ymfm_opm.h"
 #include "YM2151Interface.h"
 #include "OPMFileLoader.h"
+#include "YM2151Driver.h"
 
 class YmmyProcessor;
 
@@ -16,10 +19,10 @@ struct YM2151MidiChannelState {
   uint8_t SLOT_MASK = 120;
   uint8_t TL[4];
   int8_t KF;
-  OPMCPSParams cpsParams;
   uint8_t note = 0;
   uint8_t velocity = 0;
   uint8_t isNoteActive = false;
+  std::vector<uint8_t> driverData;
 
 public:
   void reset() {
@@ -34,7 +37,7 @@ public:
     SLOT_MASK = 0x78;
     KF = 0;
     memset(TL, 0, sizeof(TL));
-    cpsParams = {};
+    driverData.clear();
   }
 };
 
@@ -48,7 +51,8 @@ enum class RLSetting : uint8_t {
 class YM2151Synth: public Synth,
                     public ValueTree::Listener,
                     public AudioProcessorValueTreeState::Listener,
-                    public ymfm::ymfm_interface {
+                    public ymfm::ymfm_interface,
+                    public YM2151DriverHost {
 public:
   YM2151Synth(YmmyProcessor* processor, AudioProcessorValueTreeState& vts);
   ~YM2151Synth();
@@ -60,7 +64,7 @@ public:
 
   SynthType getSynthType() override { return YM2151; }
   void receiveFile(juce::MemoryBlock&, SynthFileType fileType) override;
-  void changePreset(OPMPatch& patch, int channel, bool enableLFO);
+  void changePreset(OPMPatch& patch, int channel);
   void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
   void prepareToPlay (double sampleRate, int samplesPerBlock) override;
   int getNumPrograms() override;
@@ -90,11 +94,17 @@ private:
   void handleSysex(MidiMessage& message);
   void processMidiMessage(MidiMessage& m);
   OPMPatch loadPresetFromVST(int bankNum, int presetNum);
-  void setChannelVolume(int channel, uint8_t atten[4]);
+  void setChannelVolume(int channel, const std::array<uint8_t, 4>& atten);
   void setChannelRL(int channel, RLSetting lr);
-  void cpsChannelVolumeUpdate(int channel);
-  void defaultChannelVolumeUpdate(int channel);
+  void defaultChannelVolumeUpdate(int channel) override;
   void defaultChannelPanUpdate(int channel);
+  // void applyDefaultChannelVolume(int channel) override;
+  void applyOperatorAttenuation(int channel, const std::array<uint8_t, 4>& attenuation) override;
+  void updateChannelVolume(int channel);
+  void ensureCurrentDriver();
+  void switchDriverIfNeeded(const std::string& desiredDriverName, int targetChannel);
+  std::string normalizeDriverName(const std::string& name) const;
+  void resetChannelsExcept(int preservedChannel);
 
 
 private:
@@ -104,6 +114,8 @@ private:
   juce::AudioBuffer<float> tempBuffer;
 
   YM2151MidiChannelState midiChannelState[8] = {};
+  std::unique_ptr<YM2151Driver> currentDriver;
+  std::string activeDriverKey;
 
   static const StringArray programChangeParams;
 

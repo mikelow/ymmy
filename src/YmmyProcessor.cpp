@@ -112,8 +112,10 @@ bool YmmyProcessor::handleSysex(
       incomingFile.append(destBuf, static_cast<size_t>(outOffset));
       // We should probably load the SF2 if incomingSF2Size == 0
 
-      if (incomingFileSize > 0)
+      if (incomingFileSize > 0) {
+        delete[] destBuf;
         break;
+      }
 
       SynthFileType fileType = static_cast<SynthFileType>(sysexData[2]);
       SynthType synthType = fileTypeToSynthType(fileType);
