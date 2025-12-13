@@ -1,5 +1,4 @@
 #include "Cps1YM2151Driver.h"
-
 #include "YM2151Synth.h"
 
 #include <algorithm>
@@ -78,7 +77,6 @@ void Cps1YM2151Driver::assignPatchToChannel(const OPMPatch& patch,
                                             int channel,
                                             YM2151DriverHost& host,
                                             YM2151MidiChannelState& channelState) {
-  channelState.driverData = patch.driver.dataBytes;
   std::optional<OPMCPSParams> params;
   if (!patch.driver.dataBytes.empty()) {
     OPMCPSParams parsedParams{};
@@ -89,42 +87,40 @@ void Cps1YM2151Driver::assignPatchToChannel(const OPMPatch& patch,
   channelParams[channel] = params;
 }
 
-void Cps1YM2151Driver::updateChannelVolume(int channel,
-                                           YM2151DriverHost& host,
-                                           YM2151MidiChannelState& channelState) {
+
+bool Cps1YM2151Driver::updateChannelTL(int channel,
+                                       YM2151DriverHost& host,
+                                       YM2151MidiChannelState& channelState) {
   auto& params = channelParams[channel];
-  if (params.has_value()) {
-    if (!channelState.isNoteActive) {
-      return;
-    }
-
-    uint8_t note = channelState.note;
-    uint8_t velocity = channelState.velocity;
-    uint8_t channelVolume = channelState.volume;
-    uint8_t channelVolumeAtten = 0x7F - channelVolume;
-    channelVolumeAtten += 0x7F - velocity;
-
-    uint8_t attenByte;
-    uint8_t volKeyScaleAtten;
-    uint8_t CON_limits[4] = { 7, 5, 4, 0 };
-    std::array<uint8_t, 4> opAtten{};
-    for (int i = 0; i < 4; i++) {
-      uint8_t keyScale = params->vol_data[i].key_scale_sensitivity;
-      volKeyScaleAtten = calculateKeyScaleAttenuation(keyScale, note);
-      auto conLimit = CON_limits[i];
-      uint32_t finalAttenuation = volKeyScaleAtten;
-      if (channelState.CON < conLimit) {
-        finalAttenuation += channelState.TL[i];
-      } else {
-        finalAttenuation += channelState.TL[i] + channelVolumeAtten;
-      }
-      attenByte = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
-      opAtten[i] = attenByte;
-    }
-    host.applyOperatorAttenuation(channel, opAtten);
-    return;
+  if (!params.has_value() || !channelState.isNoteActive) {
+    return false;
   }
-  host.defaultChannelVolumeUpdate(channel);
+
+  uint8_t note = channelState.note;
+  uint8_t velocity = channelState.velocity;
+  uint8_t channelVolume = channelState.volume;
+  uint8_t channelVolumeAtten = 0x7F - channelVolume;
+  channelVolumeAtten += 0x7F - velocity;
+
+  uint8_t attenByte;
+  uint8_t volKeyScaleAtten;
+  uint8_t CON_limits[4] = { 7, 5, 4, 0 };
+  std::array<uint8_t, 4> opAtten{};
+  for (int i = 0; i < 4; i++) {
+    uint8_t keyScale = params->vol_data[i].key_scale_sensitivity;
+    volKeyScaleAtten = calculateKeyScaleAttenuation(keyScale, note);
+    auto conLimit = CON_limits[i];
+    uint32_t finalAttenuation = volKeyScaleAtten;
+    if (channelState.CON < conLimit) {
+      finalAttenuation += channelState.TL[i];
+    } else {
+      finalAttenuation += channelState.TL[i] + channelVolumeAtten;
+    }
+    attenByte = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
+    opAtten[i] = attenByte;
+  }
+  host.setChannelTL(channel, opAtten);
+  return true;
 }
 
 bool Cps1YM2151Driver::shouldResetLFOOnNoteOn(int channel) const {

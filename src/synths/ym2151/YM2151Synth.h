@@ -19,6 +19,7 @@ struct YM2151MidiChannelState {
   uint8_t SLOT_MASK = 120;
   uint8_t TL[4];
   int8_t KF;
+  int8_t cc[127];
   uint8_t note = 0;
   uint8_t velocity = 0;
   uint8_t isNoteActive = false;
@@ -39,6 +40,15 @@ public:
     memset(TL, 0, sizeof(TL));
     driverData.clear();
   }
+};
+
+struct YM2151SynthChannelState {
+  uint8_t RL = 0xC0;
+  uint8_t FL = 0;
+  uint8_t CON = 0;
+  uint8_t SLOT_MASK = 120;
+  uint8_t TL[4];
+  int8_t KF;
 };
 
 
@@ -91,21 +101,22 @@ public:
   void refreshBanks(std::vector<OPMPatch>& patches);
 
 private:
+  // YM2151DriverHost
+  void defaultCCHandler(int channel, uint8_t controllerNum) override;
+  void defaultChannelTLUpdate(int channel) override;
+  void defaultChannelPanUpdate(int channel) override;
+  void setChannelTL(int channel, const std::array<uint8_t, 4>& atten) override;
+  void setChannelRL(int channel, RLSetting lr) override;
+
   void handleSysex(MidiMessage& message);
   void processMidiMessage(MidiMessage& m);
+
   OPMPatch loadPresetFromVST(int bankNum, int presetNum);
-  void setChannelVolume(int channel, const std::array<uint8_t, 4>& atten);
-  void setChannelRL(int channel, RLSetting lr);
-  void defaultChannelVolumeUpdate(int channel) override;
-  void defaultChannelPanUpdate(int channel);
-  // void applyDefaultChannelVolume(int channel) override;
-  void applyOperatorAttenuation(int channel, const std::array<uint8_t, 4>& attenuation) override;
-  void updateChannelVolume(int channel);
+
   void ensureCurrentDriver();
   void switchDriverIfNeeded(const std::string& desiredDriverName, int targetChannel);
   std::string normalizeDriverName(const std::string& name) const;
   void resetChannelsExcept(int preservedChannel);
-
 
 private:
   YmmyProcessor* processor;
@@ -124,8 +135,6 @@ private:
   int channelGroup;
 
   OPMFileLoader opmLoader;
-  // YMFM
   YM2151Interface interface;
-
   ymfm::ym2151::output_data opm_out;
 };

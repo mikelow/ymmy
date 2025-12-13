@@ -5,16 +5,21 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 #include "OPMTypes.h"
+
+enum class RLSetting : uint8_t;
 
 class YM2151DriverHost {
 public:
   virtual ~YM2151DriverHost() = default;
 
-  virtual void defaultChannelVolumeUpdate(int channel) = 0;
-  virtual void applyOperatorAttenuation(int channel, const std::array<uint8_t, 4>& attenuation) = 0;
+  virtual void defaultCCHandler(int channel, uint8_t controllerNum) = 0;
+  virtual void defaultChannelTLUpdate(int channel) = 0;
+  virtual void defaultChannelPanUpdate(int channel) = 0;
+
+  virtual void setChannelTL(int channel, const std::array<uint8_t, 4>& atten) = 0;
+  virtual void setChannelRL(int channel, RLSetting lr) = 0;
 };
 
 struct YM2151MidiChannelState;
@@ -27,10 +32,14 @@ public:
   virtual void assignPatchToChannel(const OPMPatch& patch,
                                     int channel,
                                     YM2151DriverHost& host,
-                                    YM2151MidiChannelState& channelState) = 0;
-  virtual void updateChannelVolume(int channel,
-                                   YM2151DriverHost& host,
-                                   YM2151MidiChannelState& channelState) = 0;
+                                    YM2151MidiChannelState& channelState) {}
+  virtual bool handleCC(int channel,
+                        int controllerNum,
+                        YM2151DriverHost& host,
+                        YM2151MidiChannelState& channelState) { return false; }
+  virtual bool updateChannelTL(int channel,
+                               YM2151DriverHost& host,
+                               YM2151MidiChannelState& channelState) { return false; }
   virtual bool shouldResetLFOOnNoteOn(int channel) const { return false; }
   virtual bool enableLFO(int channel) const { return false; }
 };
@@ -38,13 +47,6 @@ public:
 class DefaultYM2151Driver : public YM2151Driver {
 public:
   std::string getName() const override { return "default"; }
-  void assignPatchToChannel(const OPMPatch& patch,
-                            int channel,
-                            YM2151DriverHost& host,
-                            YM2151MidiChannelState& channelState) override;
-  void updateChannelVolume(int channel,
-                           YM2151DriverHost& host,
-                           YM2151MidiChannelState& channelState) override;
 };
 
 std::unique_ptr<YM2151Driver> createDriver(const std::string& name);

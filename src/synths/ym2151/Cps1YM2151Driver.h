@@ -27,9 +27,7 @@ public:
                             int channel,
                             YM2151DriverHost& host,
                             YM2151MidiChannelState& channelState) override;
-  void updateChannelVolume(int channel,
-                           YM2151DriverHost& host,
-                           YM2151MidiChannelState& channelState) override;
+  bool updateChannelTL(int channel, YM2151DriverHost& host, YM2151MidiChannelState& channelState) override;
   bool shouldResetLFOOnNoteOn(int channel) const override;
   bool enableLFO(int channel) const override;
 

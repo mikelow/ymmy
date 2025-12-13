@@ -121,15 +121,17 @@ void YM2151Synth::receiveFile(juce::MemoryBlock& data, SynthFileType fileType) {
 
 void YM2151Synth::changePreset(OPMPatch& patch, int channel) {
   switchDriverIfNeeded(patch.driver.name, channel);
+  auto& chState = midiChannelState[channel];
 
-  midiChannelState[channel].RL = patch.channelParams.PAN;
-  midiChannelState[channel].FL = patch.channelParams.FL << 3;
-  midiChannelState[channel].CON = patch.channelParams.CON;
-  midiChannelState[channel].SLOT_MASK = patch.channelParams.SLOT_MASK;
+  chState.RL = patch.channelParams.PAN;
+  chState.FL = patch.channelParams.FL << 3;
+  chState.CON = patch.channelParams.CON;
+  chState.SLOT_MASK = patch.channelParams.SLOT_MASK;
   for (int i = 0; i < 4; ++i) {
-    midiChannelState[channel].TL[i] = patch.opParams[i].TL;
+    chState.TL[i] = patch.opParams[i].TL;
   }
-  ensureCurrentDriver();
+  chState.driverData = patch.driver.dataBytes;
+  // ensureCurrentDriver();
   currentDriver->assignPatchToChannel(patch, channel, *this, midiChannelState[channel]);
 
   interface.changePreset(patch, channel, currentDriver->enableLFO(channel));
@@ -166,7 +168,7 @@ void YM2151Synth::handleSysex(MidiMessage& message) {
   }
 }
 
-void YM2151Synth::setChannelVolume(int channel, const std::array<uint8_t, 4>& atten) {
+void YM2151Synth::setChannelTL(int channel, const std::array<uint8_t, 4>& atten) {
   for (int i = 0; i < 4; i++) {
     interface.write(0x60 + (i*8) + channel, atten[i]);
   }
@@ -179,27 +181,68 @@ void YM2151Synth::setChannelRL(int channel, RLSetting lr) {
   interface.write(0x20 + channel, dataByte);
 }
 
-void YM2151Synth::defaultChannelVolumeUpdate(int channel) {
-  YM2151MidiChannelState& chanState = midiChannelState[channel];
+void YM2151Synth::defaultCCHandler(int channel, uint8_t controllerNum) {
+  YM2151MidiChannelState& chState = midiChannelState[channel];
+  uint8_t controllerValue = chState.cc[controllerNum];
 
-  // if (!chanState.isNoteActive) {
+  switch (controllerNum) {
+    // VOPM implementation:
+    case MODULATION_MSB:    // CC 1
+    case EFFECTS1_MSB:      // CC 12
+      // AMD hi
+      break;
+
+    case BREATH_MSB:        // CC 2
+    case EFFECTS2_MSB:      // CC 13
+      // PMD hi
+      break;
+
+    case MODULATION_WHEEL_LSB: // CC 33
+    case EFFECTS1_LSB:         // CC 44
+      // AMD lo
+      break;
+
+    case BREATH_LSB:        // CC 34
+    case EFFECTS2_LSB:      // CC 45
+      // PMD lo
+      break;
+
+    case VOLUME_MSB: {
+      chState.volume = controllerValue;
+      defaultChannelTLUpdate(channel);
+      break;
+    }
+    case PAN_MSB: {
+      chState.pan = controllerValue;
+      defaultChannelPanUpdate(channel);
+      break;
+    }
+  }
+
+}
+
+
+void YM2151Synth::defaultChannelTLUpdate(int channel) {
+  YM2151MidiChannelState& chState = midiChannelState[channel];
+
+  // if (!chState.isNoteActive) {
   //   return;
   // }
 
   uint8_t CON_limits[8] = { 1, 1, 1, 1, 2, 3, 3, 4 };
   std::array<uint8_t, 4> opAtten{};
 
-  auto conLimit = CON_limits[chanState.CON];
+  auto conLimit = CON_limits[chState.CON];
   for (int i = 0; i < 4; i++) {
     int slot = 3 - i;
-    uint8_t tl = chanState.TL[slot];
+    uint8_t tl = chState.TL[slot];
     if (i < conLimit) {
-      tl += (0x7F - chanState.volume);
-      tl += (0x7F - chanState.velocity);
+      tl += (0x7F - chState.volume);
+      tl += (0x7F - chState.velocity);
     }
     opAtten[slot] = tl;
   }
-  setChannelVolume(channel, opAtten);
+  setChannelTL(channel, opAtten);
 }
 
 void YM2151Synth::defaultChannelPanUpdate(int channel) {
@@ -215,15 +258,6 @@ void YM2151Synth::defaultChannelPanUpdate(int channel) {
   }
 }
 
-void YM2151Synth::applyOperatorAttenuation(int channel, const std::array<uint8_t, 4>& attenuation) {
-  setChannelVolume(channel, attenuation);
-}
-
-void YM2151Synth::updateChannelVolume(int channel) {
-  ensureCurrentDriver();
-  currentDriver->updateChannelVolume(channel, *this, midiChannelState[channel]);
-}
-
 void YM2151Synth::processMidiMessage(MidiMessage& m) {
   auto rawData = m.getRawData();
   if (rawData[0] == 0xF0) {
@@ -234,7 +268,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
   const uint8_t eventNibble = rawData[0] & 0xf0;
   int channelGroupOffset = channelGroup * 16;
   int channel = (m.getChannel() - 1 + channelGroupOffset) % 8;
-  YM2151MidiChannelState& chanState = midiChannelState[channel];
+  YM2151MidiChannelState& chState = midiChannelState[channel];
 
   switch (eventNibble) {
     case NOTE_OFF:
@@ -247,7 +281,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 
       // temporary adjustment to get notes aligned with 3.58mhz freq
       absNote -= 13;
-      if ((chanState.KF & 0x80) > 0) {
+      if ((chState.KF & 0x80) > 0) {
         absNote -= 1;
       }
       int octave = absNote / 12;
@@ -258,20 +292,22 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       uint8_t finalNoteValue = ((octave & 7) << 4) | noteTable[note];
 
       // Set volume of note
-      midiChannelState[channel].isNoteActive = true;
-      midiChannelState[channel].note = finalNoteValue;
-      midiChannelState[channel].velocity = vel;
-      updateChannelVolume(channel);
+      chState.isNoteActive = true;
+      chState.note = finalNoteValue;
+      chState.velocity = vel;
+      if (!currentDriver->updateChannelTL(channel, *this, chState)) {
+        defaultChannelTLUpdate(channel);
+      }
 
       // printf("OCT: %d    NOTE: %d  val: %X  atten: %X  ksAtten: %X \n", octave, note,
       // finalNoteValue);
       // Send octave / note
       interface.write(0x28 + channel, finalNoteValue);
       // Send note on
-      interface.write(8, chanState.SLOT_MASK | channel);
+      interface.write(8, chState.SLOT_MASK | channel);
 
       // If the instrument reset_lfo flag is set, we reset LFO phase after note on
-      if (currentDriver && currentDriver->shouldResetLFOOnNoteOn(channel)) {
+      if (currentDriver->shouldResetLFOOnNoteOn(channel)) {
         interface.write(1, 2);
         interface.write(1, 0);
       }
@@ -279,21 +315,17 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
     }
     case KEY_PRESSURE:
       break;
-    case CONTROL_CHANGE:
-      switch (m.getControllerNumber()) {
-        case VOLUME_MSB: {
-          int value = m.getControllerValue();
-          midiChannelState[channel].volume = value;
-          updateChannelVolume(channel);
-          break;
-        }
-        case PAN_MSB: {
-          int value = m.getControllerValue();
-          midiChannelState[channel].pan = value;
-          defaultChannelPanUpdate(channel);
-        }
+    case CONTROL_CHANGE: {
+      int controllerNum = m.getControllerNumber();
+      int controllerValue = m.getControllerValue();
+      if (controllerNum >= 0 && controllerNum <= 127 && controllerValue >= 0 && controllerValue <= 127) {
+        chState.cc[m.getControllerNumber()] = m.getControllerValue();
+      }
+      if (!currentDriver->handleCC(channel, controllerNum, *this, midiChannelState[channel])) {
+        defaultCCHandler(channel, controllerNum);
       }
       break;
+    }
     case PROGRAM_CHANGE: {
       auto patch = loadPresetFromVST(0, m.getProgramChangeNumber());
       changePreset(patch, channel);

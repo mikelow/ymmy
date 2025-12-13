@@ -60,19 +60,6 @@ bool parseDriverMetadataLine(const std::string& line, OPMDriverData& driverData)
   return false;
 }
 
-void DefaultYM2151Driver::assignPatchToChannel(const OPMPatch& patch,
-                                               int channel,
-                                               YM2151DriverHost& host,
-                                               YM2151MidiChannelState& channelState) {
-  channelState.driverData = patch.driver.dataBytes;
-}
-
-void DefaultYM2151Driver::updateChannelVolume(int channel,
-                                              YM2151DriverHost& host,
-                                              YM2151MidiChannelState& channelState) {
-  host.defaultChannelVolumeUpdate(channel);
-}
-
 std::unique_ptr<YM2151Driver> createDriver(const std::string& name) {
   auto lowered = toLower(name);
   if (lowered == "cps") {
