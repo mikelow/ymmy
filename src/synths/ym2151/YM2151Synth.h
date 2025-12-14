@@ -7,50 +7,108 @@
 #include "YM2151Interface.h"
 #include "OPMFileLoader.h"
 #include "YM2151Driver.h"
+#include "../../../../../src/main/util/MidiConstants.h"
+
+#include <hfs/hfs_format.h>
 
 class YmmyProcessor;
 
-struct YM2151MidiChannelState {
-  uint8_t volume = 0x7F;
-  uint8_t pan = 64;
-  uint8_t RL = 0xC0;
-  uint8_t FL = 0;
-  uint8_t CON = 0;
-  uint8_t SLOT_MASK = 120;
-  uint8_t TL[4];
-  int8_t KF;
-  int8_t cc[127];
-  uint8_t note = 0;
-  uint8_t velocity = 0;
-  uint8_t isNoteActive = false;
-  std::vector<uint8_t> driverData;
+struct ChannelState {
+  struct YM2151ChannelState {
+    uint8_t RL = 0xC0;
+    uint8_t FL = 0;
+    uint8_t CON = 0;
+    uint8_t SLOT_MASK = 120;
+    uint8_t TL[4];
+    int8_t KF;
+    uint8_t AMS;
+    uint8_t PMS;
+    std::vector<uint8_t> driverData;
 
-public:
+    void reset() {
+      RL = 0xC0;
+      FL = 0;
+      CON = 0;
+      SLOT_MASK = 0x78;
+      KF = 0;
+      AMS = 0;
+      PMS = 0;
+      memset(TL, 0, sizeof(TL));
+      driverData.clear();
+    }
+
+    void updateWithPatch(const OPMPatch& patch) {
+      RL = patch.channelParams.PAN;
+      FL = patch.channelParams.FL << 3;
+      CON = patch.channelParams.CON;
+      SLOT_MASK = patch.channelParams.SLOT_MASK;
+      AMS = patch.channelParams.AMS;
+      PMS = patch.channelParams.PMS << 4;
+      for (int i = 0; i < 4; ++i) {
+        TL[i] = patch.opParams[i].TL;
+      }
+
+      driverData = patch.driver.dataBytes;
+    }
+  };
+
+  struct MidiChannelState {
+    uint8_t volume = 0x7F;
+    uint8_t pan = 64;
+    int8_t cc[127];
+    uint8_t note = 0;
+    uint8_t velocity = 0;
+    uint8_t isNoteActive = false;
+
+    uint8_t lfrqLo = 0;
+  public:
+    void reset() {
+      note = 0;
+      volume = 0x7F;
+      velocity = 0x7F;
+      pan = 64;
+      isNoteActive = false;
+      lfrqLo = 0;
+    }
+  };
+
+  YM2151ChannelState ym;
+  MidiChannelState midi;
+
   void reset() {
-    note = 0;
-    volume = 0x7F;
-    velocity = 0x7F;
-    pan = 64;
-    isNoteActive = false;
-    RL = 0xC0;
-    FL = 0;
-    CON = 0;
-    SLOT_MASK = 0x78;
-    KF = 0;
-    memset(TL, 0, sizeof(TL));
-    driverData.clear();
+    ym.reset();
+    midi.reset();
   }
 };
 
-struct YM2151SynthChannelState {
-  uint8_t RL = 0xC0;
-  uint8_t FL = 0;
-  uint8_t CON = 0;
-  uint8_t SLOT_MASK = 120;
-  uint8_t TL[4];
-  int8_t KF;
-};
+struct GlobalState {
+  struct YM2151GlobalState {
+    uint8_t LFRQ;
+    uint8_t AMD;
+    uint8_t PMD;
+    uint8_t WF;
 
+    void reset() {
+      LFRQ = 0;
+      AMD = 0;
+      PMD = 0;
+      WF = 0;
+    }
+
+    void updateWithPatch(const OPMPatch& patch) {
+      LFRQ = patch.lfoParams.LFRQ;
+      AMD = patch.lfoParams.AMD;
+      PMD = patch.lfoParams.PMD;
+      WF = patch.lfoParams.WF;
+    }
+  };
+
+  YM2151GlobalState ym;
+
+  void reset() {
+    ym.reset();
+  }
+};
 
 enum class RLSetting : uint8_t {
   R = 0x80,
@@ -107,6 +165,10 @@ private:
   void defaultChannelPanUpdate(int channel) override;
   void setChannelTL(int channel, const std::array<uint8_t, 4>& atten) override;
   void setChannelRL(int channel, RLSetting lr) override;
+  void setLFRQ(uint8_t lfrq);
+  void setAMD(uint8_t amd);
+  void setPMD(uint8_t pmd);
+  void setWaveform(uint8_t wf);
 
   void handleSysex(MidiMessage& message);
   void processMidiMessage(MidiMessage& m);
@@ -124,7 +186,8 @@ private:
   std::unique_ptr<AudioBuffer<float>> nativeBuffer;
   juce::AudioBuffer<float> tempBuffer;
 
-  YM2151MidiChannelState midiChannelState[8] = {};
+  ChannelState chanState[8] = {};
+  GlobalState globState;
   std::unique_ptr<YM2151Driver> currentDriver;
   std::string activeDriverKey;
 

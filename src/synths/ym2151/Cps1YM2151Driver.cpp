@@ -76,7 +76,7 @@ bool Cps1YM2151Driver::parseCpsParams(const std::vector<uint8_t>& data, OPMCPSPa
 void Cps1YM2151Driver::assignPatchToChannel(const OPMPatch& patch,
                                             int channel,
                                             YM2151DriverHost& host,
-                                            YM2151MidiChannelState& channelState) {
+                                            ChannelState& channelState) {
   std::optional<OPMCPSParams> params;
   if (!patch.driver.dataBytes.empty()) {
     OPMCPSParams parsedParams{};
@@ -90,15 +90,15 @@ void Cps1YM2151Driver::assignPatchToChannel(const OPMPatch& patch,
 
 bool Cps1YM2151Driver::updateChannelTL(int channel,
                                        YM2151DriverHost& host,
-                                       YM2151MidiChannelState& channelState) {
+                                       ChannelState& chState) {
   auto& params = channelParams[channel];
-  if (!params.has_value() || !channelState.isNoteActive) {
+  if (!params.has_value() || !chState.midi.isNoteActive) {
     return false;
   }
 
-  uint8_t note = channelState.note;
-  uint8_t velocity = channelState.velocity;
-  uint8_t channelVolume = channelState.volume;
+  uint8_t note = chState.midi.note;
+  uint8_t velocity = chState.midi.velocity;
+  uint8_t channelVolume = chState.midi.volume;
   uint8_t channelVolumeAtten = 0x7F - channelVolume;
   channelVolumeAtten += 0x7F - velocity;
 
@@ -111,10 +111,10 @@ bool Cps1YM2151Driver::updateChannelTL(int channel,
     volKeyScaleAtten = calculateKeyScaleAttenuation(keyScale, note);
     auto conLimit = CON_limits[i];
     uint32_t finalAttenuation = volKeyScaleAtten;
-    if (channelState.CON < conLimit) {
-      finalAttenuation += channelState.TL[i];
+    if (chState.ym.CON < conLimit) {
+      finalAttenuation += chState.ym.TL[i];
     } else {
-      finalAttenuation += channelState.TL[i] + channelVolumeAtten;
+      finalAttenuation += chState.ym.TL[i] + channelVolumeAtten;
     }
     attenByte = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
     opAtten[i] = attenByte;

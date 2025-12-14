@@ -8,6 +8,7 @@
 
 #include "OPMTypes.h"
 
+struct ChannelState;
 enum class RLSetting : uint8_t;
 
 class YM2151DriverHost {
@@ -22,8 +23,6 @@ public:
   virtual void setChannelRL(int channel, RLSetting lr) = 0;
 };
 
-struct YM2151MidiChannelState;
-
 class YM2151Driver {
 public:
   virtual ~YM2151Driver() = default;
@@ -32,14 +31,14 @@ public:
   virtual void assignPatchToChannel(const OPMPatch& patch,
                                     int channel,
                                     YM2151DriverHost& host,
-                                    YM2151MidiChannelState& channelState) {}
+                                    ChannelState& channelState) {}
   virtual bool handleCC(int channel,
                         int controllerNum,
                         YM2151DriverHost& host,
-                        YM2151MidiChannelState& channelState) { return false; }
+                        ChannelState& channelState) { return false; }
   virtual bool updateChannelTL(int channel,
                                YM2151DriverHost& host,
-                               YM2151MidiChannelState& channelState) { return false; }
+                               ChannelState& channelState) { return false; }
   virtual bool shouldResetLFOOnNoteOn(int channel) const { return false; }
   virtual bool enableLFO(int channel) const { return false; }
 };
