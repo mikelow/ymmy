@@ -125,13 +125,16 @@ void YM2151Synth::changePreset(OPMPatch& patch, int channel) {
   chState.ym.updateWithPatch(patch);
 
   // ensureCurrentDriver();
-  currentDriver->assignPatchToChannel(patch, channel, *this, chState);
 
-  globState.ym.LFRQ = patch.lfoParams.LFRQ;
-  globState.ym.AMD = patch.lfoParams.AMD;
-  globState.ym.PMD = patch.lfoParams.PMD;
-  globState.ym.WF = patch.lfoParams.WF;
+  if (currentDriver->enableLFO(channel)) {
+    globState.ym.LFRQ = patch.lfoParams.LFRQ;
+    globState.ym.AMD = patch.lfoParams.AMD;
+    globState.ym.PMD = patch.lfoParams.PMD;
+    globState.ym.WF = patch.lfoParams.WF;
+  }
   interface.changePreset(patch, channel, currentDriver->enableLFO(channel));
+
+  currentDriver->assignPatchToChannel(patch, channel, *this, chState);
 }
 
 void YM2151Synth::defaultCCHandler(int channel, uint8_t controllerNum) {
@@ -139,6 +142,14 @@ void YM2151Synth::defaultCCHandler(int channel, uint8_t controllerNum) {
   uint8_t controllerValue = chState.midi.cc[controllerNum];
 
   switch (controllerNum) {
+    case BANK_SELECT_MSB:
+      chState.midi.bankMsb = controllerValue;
+      break;
+
+    case BANK_SELECT_LSB:
+      chState.midi.bankLsb = controllerValue;
+      break;
+
     // VOPM implementation:
     case MODULATION_MSB:    // CC 1
     case EFFECTS1_MSB:      // CC 12
@@ -164,6 +175,16 @@ void YM2151Synth::defaultCCHandler(int channel, uint8_t controllerNum) {
       // PMD lo
       break;
 
+    case SOUND_CTRL8:       // CC 77 Sound Controller 8 (Vibrato Depth)
+      // PMS
+      setPMS(channel, controllerValue / 16);
+      break;
+
+    case EFFECTS_DEPTH2:    // CC 92 Effects 2 Depth (Tremolo Depth)
+      // AMS
+      setAMS(channel, controllerValue / 32);
+      break;
+
     case 35:
       chState.midi.lfrqLo = controllerValue & 1;
       break;
@@ -176,6 +197,11 @@ void YM2151Synth::defaultCCHandler(int channel, uint8_t controllerNum) {
     case PAN_MSB: {
       chState.midi.pan = controllerValue;
       defaultChannelPanUpdate(channel);
+      break;
+    }
+
+    case 79: {
+      setWaveform(controllerValue);
       break;
     }
   }
@@ -223,12 +249,13 @@ void YM2151Synth::setChannelTL(int channel, const std::array<uint8_t, 4>& atten)
   }
 }
 
-void YM2151Synth::setChannelRL(int channel, RLSetting lr) {
+void YM2151Synth::setChannelRL(int channel, RLSetting rl) {
+  assert(static_cast<uint8_t>(rl) < 4);
   auto& ymChState = chanState[channel].ym;
 
-  uint8_t rlVal = static_cast<uint8_t>(lr);
+  uint8_t rlVal = static_cast<uint8_t>(rl);
   ymChState.RL = rlVal;
-  uint8_t dataByte = rlVal | ymChState.FL | ymChState.CON;
+  uint8_t dataByte = (rlVal << 6) | (ymChState.FL << 3) | ymChState.CON;
   interface.write(0x20 + channel, dataByte);
 }
 
@@ -238,18 +265,42 @@ void YM2151Synth::setLFRQ(uint8_t lfrq) {
 }
 
 void YM2151Synth::setAMD(uint8_t amd) {
+  assert(amd < 0x80);
+  amd &= 0x7F;
   globState.ym.AMD = amd;
   interface.write(0x19, amd & 0x7F);
 }
 
 void YM2151Synth::setPMD(uint8_t pmd) {
+  assert(pmd < 0x80);
+  pmd &= 0x7F;
   globState.ym.PMD = pmd;
   interface.write(0x19, pmd | 0x80);
 }
 
 void YM2151Synth::setWaveform(uint8_t wf) {
+  assert(wf < 4);
+  wf &= 3;
   globState.ym.WF = wf;
   interface.write(0x1B, wf & 3);
+}
+
+void YM2151Synth::setAMS(int channel, uint8_t ams) {
+  assert(channel >= 0 && channel < 8);
+  assert(ams < 4);
+  ams &= 3;
+  chanState[channel].ym.AMS = ams;
+  uint8_t newPmsAms = (chanState[channel].ym.PMS << 4) | ams;
+  interface.write(0x38 + channel, newPmsAms);
+}
+
+void YM2151Synth::setPMS(int channel, uint8_t pms) {
+  assert(channel >= 0 && channel < 8);
+  assert(pms < 8);
+  pms &= 7;
+  chanState[channel].ym.PMS = pms;
+  uint8_t newPmsAms = chanState[channel].ym.AMS | (pms << 4);
+  interface.write(0x38 + channel, newPmsAms);
 }
 
 void YM2151Synth::handleSysex(MidiMessage& message) {
@@ -308,7 +359,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 
       // temporary adjustment to get notes aligned with 3.58mhz freq
       absNote -= 13;
-      if ((chState.ym.KF & 0x80) > 0) {
+      if ((chState.ym.KF & 0x20) > 0) {     // if KF high bit is set
         absNote -= 1;
       }
       int octave = absNote / 12;
@@ -331,7 +382,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       // Send octave / note
       interface.write(0x28 + channel, finalNoteValue);
       // Send note on
-      interface.write(8, chState.ym.SLOT_MASK | channel);
+      interface.write(8, (chState.ym.SLOT_MASK << 3) | channel);
 
       // If the instrument reset_lfo flag is set, we reset LFO phase after note on
       if (currentDriver->shouldResetLFOOnNoteOn(channel)) {
@@ -354,7 +405,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
       break;
     }
     case PROGRAM_CHANGE: {
-      auto patch = loadPresetFromVST(0, m.getProgramChangeNumber());
+      auto patch = loadPresetFromVST(chState.midi.bankMsb, m.getProgramChangeNumber());
       changePreset(patch, channel);
       break;
     }
@@ -368,7 +419,7 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
 
       // next convert to a OPM Key Fraction value
       uint8_t kf = static_cast<uint8_t>(std::round(cents / 1.587301587301587));
-      chState.ym.KF = kf << 2;
+      chState.ym.KF = kf;
       constexpr uint8_t minKF = 0;
       constexpr uint8_t maxKF = 63;
       kf = std::clamp(kf, minKF, maxKF);
@@ -641,59 +692,69 @@ void YM2151Synth::refreshBanks(std::vector<OPMPatch>& patches) {
 
   ValueTree bank;
 
-  bank = { "bank", { { "num", 0 }}};
-  for (auto patch : patches) {
-    ValueTree preset = { "preset", {
-        { "num", patch.number },
-        { "name", String(patch.name) },
-      }, {
-        { "LFO", {
-            { "LFRQ", patch.lfoParams.LFRQ },
-            { "AMD", patch.lfoParams.AMD },
-            { "PMD", patch.lfoParams.PMD },
-            { "WF", patch.lfoParams.WF },
-            { "NFRQ", patch.lfoParams.NFRQ },
-          }, {},
-        },
-        { "CH", {
-            { "PAN", patch.channelParams.PAN },
-            { "FL", patch.channelParams.FL },
-            { "CON", patch.channelParams.CON },
-            { "AMS", patch.channelParams.AMS },
-            { "PMS", patch.channelParams.PMS },
-            { "SLOT_MASK", patch.channelParams.SLOT_MASK},
-            { "NE", patch.channelParams.NE },
-          }, {},
+  int numPatches = patches.size();
+  int numBanks = (numPatches / 128) + 1;
+  for (int b = 0; b < numBanks; ++b) {
+    bank = { "bank", { { "num", b }}};
+    for (int i = 0; i < 128; ++i) {
+      int p = b*128 + i;
+      if (p >= numPatches)
+        break;
+      auto patch = patches[p];
+
+      ValueTree preset = { "preset", {
+          { "num", i },
+          { "name", String(patch.name) },
+        }, {
+          { "LFO", {
+              { "LFRQ", patch.lfoParams.LFRQ },
+              { "AMD", patch.lfoParams.AMD },
+              { "PMD", patch.lfoParams.PMD },
+              { "WF", patch.lfoParams.WF },
+              { "NFRQ", patch.lfoParams.NFRQ },
+            }, {},
+          },
+          { "CH", {
+              { "PAN", patch.channelParams.PAN },
+              { "FL", patch.channelParams.FL },
+              { "CON", patch.channelParams.CON },
+              { "AMS", patch.channelParams.AMS },
+              { "PMS", patch.channelParams.PMS },
+              { "SLOT_MASK", patch.channelParams.SLOT_MASK},
+              { "NE", patch.channelParams.NE },
+            }, {},
+          }
         }
-      }
-    };
-    for (int i = 0; i < sizeof(patch.opParams)/sizeof(patch.opParams[0]); i++) {
-      String opName = "OP" + std::to_string(i);
-      preset.appendChild({ opName, {
-          { "AR", patch.opParams[i].AR },
-          { "D1R", patch.opParams[i].D1R },
-          { "D2R", patch.opParams[i].D2R },
-          { "RR", patch.opParams[i].RR },
-          { "D1L", patch.opParams[i].D1L },
-          { "TL", patch.opParams[i].TL },
-          { "KS", patch.opParams[i].KS },
-          { "MUL", patch.opParams[i].MUL },
-          { "DT1", patch.opParams[i].DT1 },
-          { "DT2", patch.opParams[i].DT2 },
-          { "AMS-EN", patch.opParams[i].AMS_EN },
-         }, {},
-      }, nullptr);
-    }
-    if (!patch.driver.name.empty()) {
-      preset.appendChild({ "DRIVER", {
-            { "name", String(patch.driver.name) },
-            { "data", serializeDriverData(patch.driver.dataBytes) },
+      };
+      for (int i = 0; i < sizeof(patch.opParams)/sizeof(patch.opParams[0]); i++) {
+        String opName = "OP" + std::to_string(i);
+        preset.appendChild({ opName, {
+            { "AR", patch.opParams[i].AR },
+            { "D1R", patch.opParams[i].D1R },
+            { "D2R", patch.opParams[i].D2R },
+            { "RR", patch.opParams[i].RR },
+            { "D1L", patch.opParams[i].D1L },
+            { "TL", patch.opParams[i].TL },
+            { "KS", patch.opParams[i].KS },
+            { "MUL", patch.opParams[i].MUL },
+            { "DT1", patch.opParams[i].DT1 },
+            { "DT2", patch.opParams[i].DT2 },
+            { "AMS-EN", patch.opParams[i].AMS_EN },
            }, {},
         }, nullptr);
+      }
+      if (!patch.driver.name.empty()) {
+        preset.appendChild({ "DRIVER", {
+              { "name", String(patch.driver.name) },
+              { "data", serializeDriverData(patch.driver.dataBytes) },
+             }, {},
+          }, nullptr);
+      }
+      bank.appendChild(preset, nullptr);
     }
-    bank.appendChild(preset, nullptr);
+    banks.appendChild(bank, nullptr);
   }
-  banks.appendChild(bank, nullptr);
+
 #if JUCE_DEBUG
 //    unique_ptr<XmlElement> xml{valueTreeState.state.createXml()};
 //    Logger::outputDebugString(xml->createDocument("",false,false));

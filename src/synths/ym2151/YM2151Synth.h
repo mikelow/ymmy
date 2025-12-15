@@ -15,14 +15,14 @@ class YmmyProcessor;
 
 struct ChannelState {
   struct YM2151ChannelState {
-    uint8_t RL = 0xC0;
-    uint8_t FL = 0;
-    uint8_t CON = 0;
-    uint8_t SLOT_MASK = 120;
-    uint8_t TL[4];
-    int8_t KF;
-    uint8_t AMS;
-    uint8_t PMS;
+    uint8_t RL = 0xC0;        // 2 bits, left shifted 6
+    uint8_t FL = 0;           // 3 bits, left shifted 3
+    uint8_t CON = 0;          // 3 bits
+    uint8_t SLOT_MASK = 120;  // 4 bits, left shifted 3
+    uint8_t TL[4];            // 7 bits
+    int8_t KF;                // 6 bits, left shifted 2
+    uint8_t AMS;              // 2 bits
+    uint8_t PMS;              // 3 bits, left shifted 4
     std::vector<uint8_t> driverData;
 
     void reset() {
@@ -38,12 +38,12 @@ struct ChannelState {
     }
 
     void updateWithPatch(const OPMPatch& patch) {
-      RL = patch.channelParams.PAN;
-      FL = patch.channelParams.FL << 3;
+      RL = patch.channelParams.PAN >> 6;
+      FL = patch.channelParams.FL;
       CON = patch.channelParams.CON;
-      SLOT_MASK = patch.channelParams.SLOT_MASK;
+      SLOT_MASK = patch.channelParams.SLOT_MASK >> 3;
       AMS = patch.channelParams.AMS;
-      PMS = patch.channelParams.PMS << 4;
+      PMS = patch.channelParams.PMS;
       for (int i = 0; i < 4; ++i) {
         TL[i] = patch.opParams[i].TL;
       }
@@ -59,6 +59,8 @@ struct ChannelState {
     uint8_t note = 0;
     uint8_t velocity = 0;
     uint8_t isNoteActive = false;
+    uint16_t bankMsb = 0;
+    uint16_t bankLsb = 0;
 
     uint8_t lfrqLo = 0;
   public:
@@ -69,6 +71,9 @@ struct ChannelState {
       pan = 64;
       isNoteActive = false;
       lfrqLo = 0;
+      bankMsb = 0;
+      bankLsb = 0;
+      memset(cc, 0, sizeof(cc));
     }
   };
 
@@ -83,10 +88,10 @@ struct ChannelState {
 
 struct GlobalState {
   struct YM2151GlobalState {
-    uint8_t LFRQ;
-    uint8_t AMD;
-    uint8_t PMD;
-    uint8_t WF;
+    uint8_t LFRQ;         // 8 bits
+    uint8_t AMD;          // 7 bits
+    uint8_t PMD;          // 7 bits
+    uint8_t WF;           // 2 bits
 
     void reset() {
       LFRQ = 0;
@@ -111,9 +116,9 @@ struct GlobalState {
 };
 
 enum class RLSetting : uint8_t {
-  R = 0x80,
-  L = 0x40,
-  RL = 0xC0,
+  R = 2,
+  L = 1,
+  RL = 3,
 };
 
 class YM2151Synth: public Synth,
@@ -164,11 +169,13 @@ private:
   void defaultChannelTLUpdate(int channel) override;
   void defaultChannelPanUpdate(int channel) override;
   void setChannelTL(int channel, const std::array<uint8_t, 4>& atten) override;
-  void setChannelRL(int channel, RLSetting lr) override;
+  void setChannelRL(int channel, RLSetting rl) override;
   void setLFRQ(uint8_t lfrq);
   void setAMD(uint8_t amd);
   void setPMD(uint8_t pmd);
   void setWaveform(uint8_t wf);
+  void setAMS(int channel, uint8_t ams);
+  void setPMS(int channel, uint8_t pms);
 
   void handleSysex(MidiMessage& message);
   void processMidiMessage(MidiMessage& m);

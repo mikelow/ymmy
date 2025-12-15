@@ -87,7 +87,6 @@ void Cps1YM2151Driver::assignPatchToChannel(const OPMPatch& patch,
   channelParams[channel] = params;
 }
 
-
 bool Cps1YM2151Driver::updateChannelTL(int channel,
                                        YM2151DriverHost& host,
                                        ChannelState& chState) {
