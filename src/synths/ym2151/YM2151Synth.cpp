@@ -220,11 +220,12 @@ void YM2151Synth::defaultChannelTLUpdate(int channel) {
   auto conLimit = CON_limits[chState.ym.CON];
   for (int i = 0; i < 4; i++) {
     int slot = 3 - i;
-    uint8_t tl = chState.ym.TL[slot];
+    int16_t tl = chState.ym.TL[slot];
     if (i < conLimit) {
       tl += (0x7F - chState.midi.volume);
       tl += (0x7F - chState.midi.velocity);
     }
+    tl = std::clamp<int16_t>(tl, 0, 127);
     opAtten[slot] = tl;
   }
   setChannelTL(channel, opAtten);
