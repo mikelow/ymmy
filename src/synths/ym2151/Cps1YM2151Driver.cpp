@@ -109,13 +109,13 @@ bool Cps1YM2151Driver::updateChannelTL(int channel,
     uint8_t keyScale = params->vol_data[i].key_scale_sensitivity;
     volKeyScaleAtten = calculateKeyScaleAttenuation(keyScale, note);
     auto conLimit = CON_limits[i];
-    uint32_t finalAttenuation = volKeyScaleAtten;
+    int32_t finalAttenuation = volKeyScaleAtten;
     if (chState.ym.CON < conLimit) {
       finalAttenuation += chState.ym.TL[i];
     } else {
       finalAttenuation += chState.ym.TL[i] + channelVolumeAtten;
     }
-    attenByte = static_cast<uint8_t>(std::min(finalAttenuation, 0x7FU));
+    attenByte = static_cast<int32_t>(std::min(finalAttenuation, 0x7F));
     opAtten[i] = attenByte;
   }
   host.setChannelTL(channel, opAtten);

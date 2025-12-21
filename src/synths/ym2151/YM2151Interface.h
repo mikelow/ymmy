@@ -72,6 +72,8 @@ public:
     for (uint8_t addr = 0xF; addr < 0x20; ++addr) {
       write(addr, 0);
     }
+    // write PMD
+    write(0x19, 0x80);
   }
 
   void resetChannel(uint8_t channel) {
@@ -81,15 +83,18 @@ public:
       0xFF, 0xFF, 0xFF, 0xFF
     };
     channel &= 0x7;
-    uint8_t addr = channel + 0x60;
+
+    write(0x20 + channel, 0xC0);  // reset RL FB CON (enable RL)
+    write (0x28 + channel, 0);    // reset KC
+    write (0x30 + channel, 0);    // reset KF
+    write (0x38 + channel, 0);    // reset AMS / PMS
+
+    uint8_t addr = 0x60 + channel;
     for (const uint8_t param : resetParams) {
       write(addr,param);
       addr += 8;
     }
-    // for (addr = 0x20; addr < 0x60; ++addr) {
-    for (addr = 0x30; addr < 0x38; ++addr) {
-      write(addr, 0);
-    }
+
     write(8, channel | 0x78);
     write(8, channel | 0);
   }

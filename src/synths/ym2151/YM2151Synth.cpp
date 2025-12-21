@@ -75,6 +75,8 @@ YM2151Synth::YM2151Synth(YmmyProcessor* p, AudioProcessorValueTreeState& valueTr
 //  for (const auto &[param, genId]: paramToGenerator) {
 //    vts.addParameterListener(param, this);
 //  }
+  currentDriver = createDriver("default");
+  activeDriverKey = "default";
 }
 
 YM2151Synth::~YM2151Synth() {
@@ -407,6 +409,8 @@ void YM2151Synth::processMidiMessage(MidiMessage& m) {
     }
     case PROGRAM_CHANGE: {
       auto patch = loadPresetFromVST(chState.midi.bankMsb, m.getProgramChangeNumber());
+      if (patch.channelParams.SLOT_MASK == 0 && patch.name == "")
+        break;
       changePreset(patch, channel);
       break;
     }
@@ -637,8 +641,6 @@ void YM2151Synth::reset() {
     interface.resetChannel(i);
     chanState[i].reset();
   }
-  currentDriver = createDriver("default");
-  activeDriverKey = normalizeDriverName("default");
 }
 
 std::string YM2151Synth::normalizeDriverName(const std::string& name) const {
